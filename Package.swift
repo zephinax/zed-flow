@@ -7,19 +7,23 @@ let package = Package(
         .macOS(.v14)
     ],
     products: [
-        .executable(name: "ZedFlow", targets: ["ZedFlow"])
+        .library(name: "ZedFlowKit", targets: ["ZedFlowKit"]),
+        .executable(name: "ZedFlow", targets: ["ZedFlow"]),
+        .executable(name: "ZedFlowTests", targets: ["ZedFlowTests"])
     ],
     targets: [
+        .target(
+            name: "ZedFlowKit",
+            path: "Sources/ZedFlowKit"
+        ),
         .executableTarget(
             name: "ZedFlow",
-            path: "Sources/ZedFlow",
-            resources: [
-                .process("Resources")
-            ]
+            dependencies: ["ZedFlowKit"],
+            path: "Sources/ZedFlow"
         ),
-        .testTarget(
+        .executableTarget(
             name: "ZedFlowTests",
-            dependencies: ["ZedFlow"],
+            dependencies: ["ZedFlowKit"],
             path: "Tests/ZedFlowTests"
         ),
     ]
