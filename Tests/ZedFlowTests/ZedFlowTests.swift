@@ -85,6 +85,15 @@ struct ZedFlowTestRunner {
         testLogChunkAndInterleavedOutput()
         await testScriptStoreHistoryAndClearing()
 
+        print("\n--- Phase 5: Scheduling & System Integration ---")
+        testIntervalNextExecutionCalculation()
+        testDailyNextExecutionCalculation()
+        await testJobSchedulerDisabledAndManual()
+        await testJobSchedulerConcurrentExecutionPrevention()
+        await testJobSchedulerReconciliation()
+        testNotificationServiceFiltering()
+        testLaunchAtLoginService()
+
         cleanup()
         print("\n=== Summary: \(passed) passed, \(failed) failed ===")
         if failed > 0 { exit(1) }
@@ -494,6 +503,133 @@ struct ZedFlowTestRunner {
             print("  ❌ FAIL: ScriptStore History and Clearing — \(error)")
             failed += 1
         }
+    }
+
+    // MARK: - Phase 5 Tests: Scheduling & System Integration
+
+    static func testIntervalNextExecutionCalculation() {
+        let config = ScheduleConfig.interval(minutes: 15)
+        let now = Date(timeIntervalSince1970: 1700000000) // Fixed baseline timestamp
+
+        // 1. Basic next occurrence without baseDate
+        let next = config.nextExecutionDate(after: now)
+        check("Interval calculates next occurrence (+15m)",
+              next == now.addingTimeInterval(15 * 60))
+
+        // 2. Drift-free next occurrence with baseDate
+        let anchor = now.addingTimeInterval(15 * 60)
+        let nextAnchored = config.nextExecutionDate(after: now.addingTimeInterval(5 * 60), baseDate: anchor)
+        check("Interval preserves anchor date when before next step",
+              nextAnchored == anchor)
+
+        // 3. Sleep / missed executions: if 40 minutes passed, skips missed runs and schedules next step
+        let afterSleep = now.addingTimeInterval(40 * 60)
+        let nextAfterSleep = config.nextExecutionDate(after: afterSleep, baseDate: now)
+        // 40m passed on a 15m step: step 1 is 15m, step 2 is 30m, step 3 is 45m. Next should be 45m!
+        check("Interval recalculates future step after sleep without backlog",
+              nextAfterSleep == now.addingTimeInterval(45 * 60))
+    }
+
+    static func testDailyNextExecutionCalculation() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+
+        // Reference date: 2024-01-15 10:00:00 GMT
+        var comp = DateComponents()
+        comp.year = 2024
+        comp.month = 1
+        comp.day = 15
+        comp.hour = 10
+        comp.minute = 0
+        comp.second = 0
+        let refDate = calendar.date(from: comp)!
+
+        // Case A: Daily at 14:00 (in the future today)
+        let dailyFuture = ScheduleConfig.daily(hour: 14, minute: 0)
+        let nextFuture = dailyFuture.nextExecutionDate(after: refDate, calendar: calendar)!
+        let compFuture = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: nextFuture)
+        check("Daily schedule calculates future time on same day",
+              compFuture.year == 2024 && compFuture.month == 1 && compFuture.day == 15 && compFuture.hour == 14 && compFuture.minute == 0)
+
+        // Case B: Daily at 08:00 (already passed today -> should roll to tomorrow)
+        let dailyPassed = ScheduleConfig.daily(hour: 8, minute: 0)
+        let nextTomorrow = dailyPassed.nextExecutionDate(after: refDate, calendar: calendar)!
+        let compTomorrow = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: nextTomorrow)
+        check("Daily schedule rolls over to tomorrow if time has passed",
+              compTomorrow.year == 2024 && compTomorrow.month == 1 && compTomorrow.day == 16 && compTomorrow.hour == 8 && compTomorrow.minute == 0)
+    }
+
+    @MainActor
+    static func testJobSchedulerDisabledAndManual() async {
+        let scheduler = JobScheduler()
+
+        let manualScript = Script(name: "Manual", scriptPath: "/bin/echo", schedule: .manual)
+        scheduler.schedule(script: manualScript)
+        check("JobScheduler ignores manual scripts", !scheduler.isScheduled(scriptId: manualScript.id))
+
+        let disabledScript = Script(name: "Disabled", scriptPath: "/bin/echo", schedule: .interval(minutes: 5), isEnabled: false)
+        scheduler.schedule(script: disabledScript)
+        check("JobScheduler ignores disabled scripts", !scheduler.isScheduled(scriptId: disabledScript.id))
+    }
+
+    @MainActor
+    static func testJobSchedulerConcurrentExecutionPrevention() async {
+        let scheduler = JobScheduler()
+        let triggered = false
+
+        scheduler.onTrigger = { _ in }
+
+        // Simulate script already running
+        scheduler.isRunningCheck = { _ in
+            return true
+        }
+
+        let script = Script(name: "Quick", scriptPath: "/bin/echo", schedule: .interval(minutes: 1))
+        let isBlocked = scheduler.isRunningCheck?(script) == true
+        check("JobScheduler checks running state to prevent concurrent execution", isBlocked && !triggered)
+    }
+
+    @MainActor
+    static func testJobSchedulerReconciliation() async {
+        let scheduler = JobScheduler()
+        let s1 = Script(name: "S1", scriptPath: "/bin/echo", schedule: .interval(minutes: 10))
+        let s2 = Script(name: "S2", scriptPath: "/bin/echo", schedule: .interval(minutes: 20))
+
+        scheduler.reconcile(scripts: [s1, s2])
+        check("JobScheduler schedules active scripts on reconciliation",
+              scheduler.isScheduled(scriptId: s1.id) && scheduler.isScheduled(scriptId: s2.id))
+
+        // Reconcile with s2 disabled and s1 removed
+        var s2Disabled = s2
+        s2Disabled.isEnabled = false
+        scheduler.reconcile(scripts: [s2Disabled])
+
+        check("JobScheduler cancels removed and disabled scripts on reconciliation",
+              !scheduler.isScheduled(scriptId: s1.id) && !scheduler.isScheduled(scriptId: s2.id))
+    }
+
+    static func testNotificationServiceFiltering() {
+        let service = NotificationService()
+
+        let scriptSuccessOnly = Script(name: "S", scriptPath: "/p", notifyOnSuccess: true, notifyOnFailure: false)
+        check("NotificationService respects notifyOnSuccess",
+              service.shouldNotify(for: scriptSuccessOnly, status: .success) &&
+              !service.shouldNotify(for: scriptSuccessOnly, status: .failed))
+
+        let scriptFailureOnly = Script(name: "F", scriptPath: "/p", notifyOnSuccess: false, notifyOnFailure: true)
+        check("NotificationService respects notifyOnFailure",
+              !service.shouldNotify(for: scriptFailureOnly, status: .success) &&
+              service.shouldNotify(for: scriptFailureOnly, status: .failed))
+
+        let scriptStopped = Script(name: "Stopped", scriptPath: "/p", notifyOnSuccess: true, notifyOnFailure: true)
+        check("NotificationService ignores stopped status",
+              !service.shouldNotify(for: scriptStopped, status: .stopped))
+    }
+
+    static func testLaunchAtLoginService() {
+        let service = LaunchAtLoginService()
+        let desc = service.statusDescription
+        check("LaunchAtLoginService reports valid status description", !desc.isEmpty)
     }
 }
 

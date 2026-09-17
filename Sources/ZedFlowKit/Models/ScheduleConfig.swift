@@ -24,4 +24,50 @@ public enum ScheduleConfig: Codable, Hashable, Sendable {
             return String(format: "Daily at %02d:%02d", hour, minute)
         }
     }
+
+    /// Calculates the next occurrence strictly after `referenceDate`.
+    ///
+    /// - Parameters:
+    ///   - referenceDate: The baseline date, defaults to current time.
+    ///   - baseDate: Optional prior anchor date used to avoid interval schedule drift.
+    ///   - calendar: Calendar to use for date components calculations.
+    /// - Returns: The calculated future execution `Date`, or `nil` if manual.
+    public func nextExecutionDate(
+        after referenceDate: Date = Date(),
+        baseDate: Date? = nil,
+        calendar: Calendar = .current
+    ) -> Date? {
+        switch self {
+        case .manual:
+            return nil
+
+        case .interval(let minutes):
+            let step = TimeInterval(max(1, minutes) * 60)
+            if let base = baseDate {
+                if base > referenceDate {
+                    return base
+                }
+                let elapsed = referenceDate.timeIntervalSince(base)
+                let stepsPassed = floor(elapsed / step) + 1
+                return base.addingTimeInterval(stepsPassed * step)
+            }
+            return referenceDate.addingTimeInterval(step)
+
+        case .daily(let hour, let minute):
+            var components = calendar.dateComponents([.year, .month, .day], from: referenceDate)
+            components.hour = hour
+            components.minute = minute
+            components.second = 0
+
+            guard let candidate = calendar.date(from: components) else {
+                return nil
+            }
+
+            if candidate > referenceDate {
+                return candidate
+            } else {
+                return calendar.date(byAdding: .day, value: 1, to: candidate)
+            }
+        }
+    }
 }

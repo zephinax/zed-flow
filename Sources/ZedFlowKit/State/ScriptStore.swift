@@ -51,6 +51,11 @@ public final class ScriptStore {
     private var activeProcesses: [UUID: RunningProcess] = [:]
     public let storageService: StorageService
     public let processRunner: ProcessRunner
+    public let scheduler: JobScheduler
+    public let notificationService: NotificationService
+    public let launchAtLoginService: LaunchAtLoginService
+
+    @ObservationIgnored nonisolated(unsafe) private var wakeObserver: NSObjectProtocol?
 
     public var runningCount: Int {
         isRunningScript.values.filter { $0 }.count
@@ -58,10 +63,41 @@ public final class ScriptStore {
 
     public init(
         storageService: StorageService? = nil,
-        processRunner: ProcessRunner = ProcessRunner()
+        processRunner: ProcessRunner = ProcessRunner(),
+        scheduler: JobScheduler? = nil,
+        notificationService: NotificationService = .shared,
+        launchAtLoginService: LaunchAtLoginService = .shared
     ) {
         self.storageService = storageService ?? StorageService()
         self.processRunner = processRunner
+        self.scheduler = scheduler ?? JobScheduler()
+        self.notificationService = notificationService
+        self.launchAtLoginService = launchAtLoginService
+
+        // Configure scheduler hooks
+        self.scheduler.onTrigger = { [weak self] script in
+            self?.runScript(script)
+        }
+        self.scheduler.isRunningCheck = { [weak self] script in
+            self?.isRunningScript[script.id] == true
+        }
+
+        // Handle macOS sleep/wake to recalculate schedules without backlog storms
+        self.wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.scheduler.handleSystemWake()
+            }
+        }
+    }
+
+    deinit {
+        if let observer = wakeObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+        }
     }
 
     // MARK: - Script Management
@@ -76,6 +112,7 @@ public final class ScriptStore {
                     latestExecutions[script.id] = latest
                 }
             }
+            scheduler.reconcile(scripts: scripts)
         } catch {
             errorMessage = "Failed to load scripts: \(error.localizedDescription)"
         }
@@ -84,12 +121,14 @@ public final class ScriptStore {
     public func addScript(_ script: Script) async throws {
         scripts.append(script)
         try await storageService.saveScripts(scripts)
+        scheduler.reconcile(scripts: scripts)
     }
 
     public func updateScript(_ script: Script) async throws {
         if let index = scripts.firstIndex(where: { $0.id == script.id }) {
             scripts[index] = script
             try await storageService.saveScripts(scripts)
+            scheduler.reconcile(scripts: scripts)
         }
     }
 
@@ -100,8 +139,18 @@ public final class ScriptStore {
         activeExecutions.removeValue(forKey: script.id)
         executionHistories.removeValue(forKey: script.id)
         isRunningScript.removeValue(forKey: script.id)
+        scheduler.reconcile(scripts: scripts)
         try await storageService.saveScripts(scripts)
         try? await storageService.deleteHistory(for: script.id)
+    }
+
+    public func toggleEnabled(for script: Script) async throws {
+        if let index = scripts.firstIndex(where: { $0.id == script.id }) {
+            scripts[index].isEnabled.toggle()
+            scripts[index].updatedAt = Date()
+            try await storageService.saveScripts(scripts)
+            scheduler.reconcile(scripts: scripts)
+        }
     }
 
     // MARK: - History Management
@@ -145,7 +194,7 @@ public final class ScriptStore {
             // Periodic buffer flusher to keep UI fluid without main thread starvation
             let flushTask = Task.detached { [weak self] in
                 while !Task.isCancelled {
-                    try? await Task.sleep(nanoseconds: 50_000_000) // 50ms interval (~20 fps live stream updates)
+                    try? await Task.sleep(nanoseconds: 50_000_000) // 50ms interval (~20 fps)
                     if Task.isCancelled { break }
                     if let pending = buffer.drainPending() {
                         await MainActor.run { [weak self] in
@@ -161,7 +210,7 @@ public final class ScriptStore {
                 }
             }
 
-            Task.detached { [processRunner, storageService] in
+            Task.detached { [processRunner, storageService, notificationService] in
                 // Wait for process to exit
                 handle.process.waitUntilExit()
 
@@ -180,6 +229,7 @@ public final class ScriptStore {
                 )
 
                 try? await storageService.recordExecution(finalExecution)
+                notificationService.sendNotificationIfNeeded(for: script, execution: finalExecution)
 
                 await MainActor.run { [weak self] in
                     guard let self = self else { return }
@@ -213,6 +263,8 @@ public final class ScriptStore {
             var history = executionHistories[script.id] ?? []
             history.insert(failedExecution, at: 0)
             executionHistories[script.id] = history
+
+            notificationService.sendNotificationIfNeeded(for: script, execution: failedExecution)
 
             Task {
                 try? await storageService.recordExecution(failedExecution)

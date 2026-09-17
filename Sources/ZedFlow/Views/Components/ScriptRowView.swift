@@ -41,8 +41,10 @@ struct ScriptRowView: View {
             components.append("custom")
         }
 
-        // Schedule
-        if script.schedule != .manual {
+        // Enabled state
+        if !script.isEnabled {
+            components.append("Disabled")
+        } else if script.schedule != .manual {
             components.append(script.schedule.displayTitle)
         }
 
@@ -158,6 +160,16 @@ struct ScriptRowView: View {
                 store.revealInFinder(script)
             } label: {
                 Label("Reveal in Finder", systemImage: "folder")
+            }
+
+            Divider()
+
+            Button {
+                Task {
+                    try? await store.toggleEnabled(for: script)
+                }
+            } label: {
+                Label(script.isEnabled ? "Disable Schedule" : "Enable Schedule", systemImage: script.isEnabled ? "pause.circle" : "play.circle")
             }
 
             Divider()

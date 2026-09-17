@@ -6,6 +6,7 @@ struct MenuBarContentView: View {
     @Bindable var store: ScriptStore
 
     @State private var showingAddSheet: Bool = false
+    @State private var showingSettings: Bool = false
     @State private var scriptToEdit: Script? = nil
     @State private var selectedScriptForDetail: Script? = nil
 
@@ -30,6 +31,9 @@ struct MenuBarContentView: View {
                     try? await store.addScript(newScript)
                 }
             }
+        }
+        .sheet(isPresented: $showingSettings) {
+            SettingsView(store: store)
         }
         .sheet(item: $scriptToEdit) { script in
             ScriptEditSheet(script: script) { updatedScript in
@@ -109,6 +113,13 @@ struct MenuBarContentView: View {
                 Button("Add Script…") {
                     showingAddSheet = true
                 }
+
+                Divider()
+
+                Button("Settings…") {
+                    showingSettings = true
+                }
+                .keyboardShortcut(",")
 
                 Divider()
 
