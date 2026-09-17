@@ -70,6 +70,7 @@ struct ZedFlowTestRunner {
         testMissingInterpreter()
         testCancellation()
         testChildProcessCleanup()
+        testForceStopIgnoresSIGTERM()
         testShebangDetection()
         testShebangEnv()
         testAutoDetectByExtension()
@@ -298,6 +299,28 @@ struct ZedFlowTestRunner {
             check("Child process cleanup after stop",
                   markerExisted && !markerRecreated)
         } catch { print("  ❌ FAIL: Child process cleanup — \(error)"); failed += 1 }
+    }
+
+    static func testForceStopIgnoresSIGTERM() {
+        // Script that traps SIGTERM and ignores it; force stop must terminate it immediately via SIGKILL
+        let scriptContents = """
+        #!/bin/sh
+        trap "" TERM
+        while true; do
+            sleep 0.2
+        done
+        """
+        let path = createTempScript("trap_term.sh", contents: scriptContents)
+        let script = Script(name: "TrapTerm", scriptPath: path, interpreter: .sh)
+        let runner = ProcessRunner()
+        do {
+            let (initial, handle) = try runner.run(script: script)
+            Thread.sleep(forTimeInterval: 0.2)
+            handle.stop(force: true)
+            let exec = runner.waitForCompletion(handle: handle, initialExecution: initial)
+            check("Force stop terminates script ignoring SIGTERM",
+                  exec.status == .stopped && !handle.process.isRunning)
+        } catch { print("  ❌ FAIL: Force stop — \(error)"); failed += 1 }
     }
 
     static func testShebangDetection() {

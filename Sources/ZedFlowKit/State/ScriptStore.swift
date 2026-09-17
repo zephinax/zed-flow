@@ -311,8 +311,31 @@ public final class ScriptStore {
     }
 
     public func stopScript(_ script: Script) {
-        guard let handle = activeProcesses[script.id] else { return }
-        handle.stop()
+        guard let handle = activeProcesses[script.id] else {
+            // Self-healing: if state is marked as running but handle is missing, reset it
+            if isRunningScript[script.id] == true {
+                isRunningScript[script.id] = false
+            }
+            return
+        }
+
+        // Force stop process, process group, and all child processes immediately
+        handle.stop(force: true)
+
+        // Safety watchdog: ensure UI and state don't hang if process or streams stall
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 500_000_000) // 500ms
+            if self.isRunningScript[script.id] == true {
+                self.isRunningScript[script.id] = false
+                self.activeProcesses.removeValue(forKey: script.id)
+                if var execution = self.activeExecutions[script.id] {
+                    execution.status = .stopped
+                    execution.endTime = Date()
+                    self.activeExecutions[script.id] = execution
+                    self.latestExecutions[script.id] = execution
+                }
+            }
+        }
     }
 
     public func executionStatus(for script: Script) -> ExecutionStatus? {

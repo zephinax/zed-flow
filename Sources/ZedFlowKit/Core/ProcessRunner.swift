@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 // MARK: - ProcessRunner Error Types
 
@@ -41,9 +42,9 @@ public enum OutputStream: Sendable {
 
 /// A handle to a running process, allowing cancellation and status inspection.
 public final class RunningProcess: @unchecked Sendable {
-    let process: Process
-    private let processGroup: pid_t
-    private let startTime: Date
+    public let process: Process
+    public let processGroup: pid_t
+    public let startTime: Date
     private let lock = NSLock()
     private var _isCancelled = false
 
@@ -60,25 +61,60 @@ public final class RunningProcess: @unchecked Sendable {
         self.startTime = startTime
     }
 
-    /// Stops the running process and its entire process group.
-    /// Sends SIGTERM first, then SIGKILL after a grace period if still alive.
-    public func stop() {
+    /// Stops the running process, all its child processes, and its process group.
+    /// If `force` is true (default), immediately delivers SIGKILL to the process, process group,
+    /// and all descendant child processes to guarantee termination.
+    public func stop(force: Bool = true) {
         lock.lock()
         _isCancelled = true
         lock.unlock()
 
         let pid = process.processIdentifier
-        guard pid > 0, process.isRunning else { return }
+        guard pid > 0 else { return }
 
-        // Send SIGTERM to the entire process group (negative pid)
-        kill(-pid, SIGTERM)
+        // Find all child/descendant processes before terminating the parent
+        let descendants = ProcessRunner.getAllDescendantPIDs(parent: pid)
 
-        // Give the process group a grace period to exit
-        let deadline = DispatchTime.now() + .milliseconds(500)
-        DispatchQueue.global(qos: .utility).asyncAfter(deadline: deadline) { [weak self] in
-            guard let self = self, self.process.isRunning else { return }
-            // Force kill the process group if still alive
+        // Detach readability handlers immediately to unblock waiting readers
+        if let stdoutPipe = process.standardOutput as? Pipe {
+            stdoutPipe.fileHandleForReading.readabilityHandler = nil
+        }
+        if let stderrPipe = process.standardError as? Pipe {
+            stderrPipe.fileHandleForReading.readabilityHandler = nil
+        }
+
+        if force {
+            // Immediate force termination: kill process group, direct PID, and all descendant PIDs
             kill(-pid, SIGKILL)
+            kill(pid, SIGKILL)
+            for childPid in descendants {
+                kill(childPid, SIGKILL)
+            }
+            if process.isRunning {
+                process.terminate()
+            }
+        } else {
+            // Graceful termination
+            kill(-pid, SIGTERM)
+            kill(pid, SIGTERM)
+            for childPid in descendants {
+                kill(childPid, SIGTERM)
+            }
+            if process.isRunning {
+                process.terminate()
+            }
+
+            // Escalation to SIGKILL after a short grace period
+            let deadline = DispatchTime.now() + .milliseconds(300)
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: deadline) { [weak self] in
+                guard let self = self, self.process.isRunning else { return }
+                kill(-pid, SIGKILL)
+                kill(pid, SIGKILL)
+                let remainingDescendants = ProcessRunner.getAllDescendantPIDs(parent: pid)
+                for childPid in remainingDescendants {
+                    kill(childPid, SIGKILL)
+                }
+            }
         }
     }
 }
@@ -90,6 +126,34 @@ public final class RunningProcess: @unchecked Sendable {
 public final class ProcessRunner: Sendable {
 
     public init() {}
+
+    // MARK: - Process Hierarchy Enumeration
+
+    /// Recursively enumerates all descendant process IDs of the given parent PID.
+    public static func getAllDescendantPIDs(parent: pid_t) -> [pid_t] {
+        guard parent > 0 else { return [] }
+        var descendants: [pid_t] = []
+        var queue = [parent]
+        var visited = Set<pid_t>([parent])
+
+        while !queue.isEmpty {
+            let current = queue.removeFirst()
+            let count = proc_listchildpids(current, nil, 0)
+            if count > 0 {
+                var buffer = [pid_t](repeating: 0, count: Int(count))
+                let actual = proc_listchildpids(current, &buffer, Int32(MemoryLayout<pid_t>.size * buffer.count))
+                for i in 0..<Int(actual) {
+                    let child = buffer[i]
+                    if child > 0 && !visited.contains(child) {
+                        visited.insert(child)
+                        descendants.append(child)
+                        queue.append(child)
+                    }
+                }
+            }
+        }
+        return descendants
+    }
 
     // MARK: - Public API
 
@@ -138,13 +202,12 @@ public final class ProcessRunner: Sendable {
         process.arguments = args
         process.currentDirectoryURL = scriptURL.deletingLastPathComponent()
         process.environment = EnvironmentResolver.resolvedEnvironment
-
-        // Create a new process group so we can kill child processes cleanly.
-        // This POSIX callback runs in the child process after fork() but before exec().
-        // Setting pgid to 0 makes the child its own process group leader.
-        var fileActions: posix_spawn_file_actions_t?
-        posix_spawn_file_actions_init(&fileActions)
         process.qualityOfService = .userInitiated
+
+        // Connect empty stdin pipe and close write end so processes reading stdin don't block
+        let stdinPipe = Pipe()
+        process.standardInput = stdinPipe
+        try? stdinPipe.fileHandleForWriting.close()
 
         // Set up pipes for stdout and stderr
         let stdoutPipe = Pipe()
@@ -160,11 +223,6 @@ public final class ProcessRunner: Sendable {
         } catch {
             throw ProcessRunnerError.launchFailed(underlying: error.localizedDescription)
         }
-
-        // Set the process group using the child's pid so kill(-pid) works
-        // This must happen immediately after launch while child is still running
-        let pid = process.processIdentifier
-        setpgid(pid, pid)
 
         let handle = RunningProcess(process: process, startTime: startTime)
 
@@ -215,16 +273,16 @@ public final class ProcessRunner: Sendable {
             stderrPipe.fileHandleForReading.readabilityHandler = nil
         }
 
-        // Read any remaining buffered output
+        // Read any remaining buffered output without blocking (availableData never hangs on open child descriptors)
         let stdoutData: Data
         let stderrData: Data
         if let stdoutPipe = handle.process.standardOutput as? Pipe {
-            stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+            stdoutData = stdoutPipe.fileHandleForReading.availableData
         } else {
             stdoutData = Data()
         }
         if let stderrPipe = handle.process.standardError as? Pipe {
-            stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+            stderrData = stderrPipe.fileHandleForReading.availableData
         } else {
             stderrData = Data()
         }
