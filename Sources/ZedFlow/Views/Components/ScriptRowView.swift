@@ -14,6 +14,10 @@ struct ScriptRowView: View {
         store.isRunningScript[script.id] == true
     }
 
+    private var activeActionName: String? {
+        store.activeExecutions[script.id]?.actionName
+    }
+
     private var executionStatus: ExecutionStatus? {
         store.executionStatus(for: script)
     }
@@ -48,18 +52,23 @@ struct ScriptRowView: View {
             components.append(script.schedule.displayTitle)
         }
 
-        // Last execution status / duration
+        // Last execution status / duration / action
         if let latest = latestExecution, !isRunning {
+            var latestInfo = ""
+            if let action = latest.actionName, !action.isEmpty {
+                latestInfo = "\(action): "
+            }
             if let duration = latest.duration {
                 if duration < 1.0 {
-                    components.append(String(format: "%.1fs", duration))
+                    latestInfo += String(format: "%.1fs", duration)
                 } else if duration < 60 {
-                    components.append(String(format: "%.0fs", duration))
+                    latestInfo += String(format: "%.0fs", duration)
                 } else {
                     let mins = Int(duration) / 60
                     let secs = Int(duration) % 60
-                    components.append("\(mins)m \(secs)s")
+                    latestInfo += "\(mins)m \(secs)s"
                 }
+                components.append(latestInfo)
             }
         }
 
@@ -67,50 +76,138 @@ struct ScriptRowView: View {
     }
 
     var body: some View {
-        HStack(spacing: 10) {
-            StatusIndicatorView(status: executionStatus)
+        VStack(alignment: .leading, spacing: 6) {
+            // Main row header
+            HStack(spacing: 10) {
+                StatusIndicatorView(status: executionStatus)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(script.name)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.primary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(script.name)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
 
-                Text(subtitleText)
-                    .font(.system(size: 11))
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-            }
-
-            Spacer(minLength: 8)
-
-            // Run / Stop Action Button
-            Button {
-                if isRunning {
-                    store.stopScript(script)
-                } else {
-                    store.runScript(script)
+                    Text(subtitleText)
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
-            } label: {
-                Image(systemName: isRunning ? "stop.fill" : "play.fill")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(isRunning ? .orange : .primary)
-                    .frame(width: 22, height: 22)
-                    .background(
-                        Circle()
-                            .fill(Color(nsColor: .controlBackgroundColor))
-                    )
-            }
-            .buttonStyle(.plain)
-            .help(isRunning ? "Stop Script" : "Run Script")
 
-            // Chevron to view details
-            Image(systemName: "chevron.right")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundColor(.secondary.opacity(isHovered ? 0.8 : 0.3))
-                .frame(width: 12)
+                Spacer(minLength: 8)
+
+                if isRunning {
+                    // Running state: Stop button
+                    Button {
+                        store.stopScript(script)
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "stop.fill")
+                                .font(.system(size: 9, weight: .bold))
+                            if let action = activeActionName {
+                                Text(action)
+                                    .font(.system(size: 10, weight: .medium))
+                            }
+                        }
+                        .foregroundColor(.orange)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(
+                            Capsule()
+                                .fill(Color.orange.opacity(0.15))
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .help("Stop Running Script")
+                } else if script.actions.isEmpty {
+                    // Standard single Run button when script has no actions
+                    Button {
+                        store.runScript(script)
+                    } label: {
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(.primary)
+                            .frame(width: 22, height: 22)
+                            .background(
+                                Circle()
+                                    .fill(Color(nsColor: .controlBackgroundColor))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .help("Run Script")
+                }
+
+                // Chevron to view details
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.secondary.opacity(isHovered ? 0.8 : 0.3))
+                    .frame(width: 12)
+            }
+
+            // Action Buttons Bar (when script defines actions)
+            if !script.actions.isEmpty {
+                HStack(spacing: 6) {
+                    // Display up to 3 actions inline
+                    ForEach(Array(script.actions.prefix(3))) { action in
+                        let isThisActionRunning = isRunning && activeActionName == action.name
+                        Button {
+                            if isThisActionRunning {
+                                store.stopScript(script)
+                            } else {
+                                store.runScript(script, action: action)
+                            }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: isThisActionRunning ? "stop.fill" : action.systemImage)
+                                    .font(.system(size: 10, weight: .medium))
+                                Text(action.name)
+                                    .font(.system(size: 11, weight: .medium))
+                                    .lineLimit(1)
+                            }
+                            .foregroundColor(isThisActionRunning ? .orange : .primary)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(
+                                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                    .fill(isThisActionRunning ? Color.orange.opacity(0.15) : Color(nsColor: .controlBackgroundColor))
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isRunning && !isThisActionRunning)
+                        .help(isThisActionRunning ? "Stop \(action.name)" : "Run \(action.name)")
+                    }
+
+                    // Compact Overflow Menu if > 3 actions
+                    if script.actions.count > 3 {
+                        Menu {
+                            ForEach(Array(script.actions.dropFirst(3))) { overflowAction in
+                                Button {
+                                    store.runScript(script, action: overflowAction)
+                                } label: {
+                                    Label(overflowAction.name, systemImage: overflowAction.systemImage)
+                                }
+                                .disabled(isRunning)
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(.secondary)
+                                .frame(width: 20, height: 20)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                        .fill(Color(nsColor: .controlBackgroundColor))
+                                )
+                        }
+                        .menuStyle(.borderlessButton)
+                        .frame(width: 20)
+                        .help("More Actions")
+                    }
+
+                    Spacer()
+                }
+                .padding(.leading, 22) // align with text under indicator
+            }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
@@ -134,12 +231,25 @@ struct ScriptRowView: View {
 
             Divider()
 
-            Button {
-                store.runScript(script)
-            } label: {
-                Label("Run Now", systemImage: "play.fill")
+            if script.actions.isEmpty {
+                Button {
+                    store.runScript(script)
+                } label: {
+                    Label("Run Now", systemImage: "play.fill")
+                }
+                .disabled(isRunning)
+            } else {
+                Menu("Run Action") {
+                    ForEach(script.actions) { action in
+                        Button {
+                            store.runScript(script, action: action)
+                        } label: {
+                            Label(action.name, systemImage: action.systemImage)
+                        }
+                    }
+                }
+                .disabled(isRunning)
             }
-            .disabled(isRunning)
 
             Button {
                 store.stopScript(script)

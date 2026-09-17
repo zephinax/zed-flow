@@ -102,6 +102,7 @@ public final class ProcessRunner: Sendable {
     /// - Throws: `ProcessRunnerError` if the script or interpreter cannot be found.
     public func run(
         script: Script,
+        action: ScriptAction? = nil,
         onOutput: OutputHandler? = nil
     ) throws -> (execution: ScriptExecution, handle: RunningProcess) {
         let scriptURL = URL(fileURLWithPath: script.scriptPath)
@@ -118,10 +119,13 @@ public final class ProcessRunner: Sendable {
         }
 
         // Resolve the interpreter binary and arguments
-        let (interpreterPath, args) = try resolveInterpreter(
+        var (interpreterPath, args) = try resolveInterpreter(
             for: script,
             scriptPath: scriptURL.path
         )
+        if let action = action {
+            args.append(contentsOf: action.arguments)
+        }
 
         // Validate interpreter exists
         guard fm.fileExists(atPath: interpreterPath) else {
@@ -168,6 +172,7 @@ public final class ProcessRunner: Sendable {
         let execution = ScriptExecution(
             scriptId: script.id,
             scriptName: script.name,
+            actionName: action?.name,
             status: .running,
             startTime: startTime
         )
@@ -251,6 +256,7 @@ public final class ProcessRunner: Sendable {
             id: initialExecution.id,
             scriptId: initialExecution.scriptId,
             scriptName: initialExecution.scriptName,
+            actionName: initialExecution.actionName,
             status: status,
             startTime: initialExecution.startTime,
             endTime: endTime,
@@ -266,6 +272,7 @@ public final class ProcessRunner: Sendable {
     /// Blocks the calling thread until the process exits.
     public func runAndWait(
         script: Script,
+        action: ScriptAction? = nil,
         onOutput: OutputHandler? = nil
     ) throws -> (execution: ScriptExecution, handle: RunningProcess) {
         final class Accumulator: @unchecked Sendable {
@@ -306,7 +313,7 @@ public final class ProcessRunner: Sendable {
             wrappedOutput = nil
         }
 
-        let (initialExecution, handle) = try run(script: script, onOutput: wrappedOutput)
+        let (initialExecution, handle) = try run(script: script, action: action, onOutput: wrappedOutput)
         let snap = acc.snapshot()
         let finalExecution = waitForCompletion(
             handle: handle,

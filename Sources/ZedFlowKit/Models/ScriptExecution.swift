@@ -35,6 +35,7 @@ public struct ScriptExecution: Identifiable, Codable, Sendable {
     public var id: UUID
     public var scriptId: UUID
     public var scriptName: String
+    public var actionName: String?
     public var status: ExecutionStatus
     public var startTime: Date
     public var endTime: Date?
@@ -44,10 +45,18 @@ public struct ScriptExecution: Identifiable, Codable, Sendable {
     public var stderr: String
     public var outputChunks: [LogChunk]
 
+    public var displayName: String {
+        if let action = actionName, !action.isEmpty {
+            return "\(scriptName) → \(action)"
+        }
+        return scriptName
+    }
+
     public init(
         id: UUID = UUID(),
         scriptId: UUID,
         scriptName: String,
+        actionName: String? = nil,
         status: ExecutionStatus,
         startTime: Date = Date(),
         endTime: Date? = nil,
@@ -60,6 +69,7 @@ public struct ScriptExecution: Identifiable, Codable, Sendable {
         self.id = id
         self.scriptId = scriptId
         self.scriptName = scriptName
+        self.actionName = actionName
         self.status = status
         self.startTime = startTime
         self.endTime = endTime
@@ -71,7 +81,7 @@ public struct ScriptExecution: Identifiable, Codable, Sendable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, scriptId, scriptName, status, startTime, endTime, duration, exitCode, stdout, stderr, outputChunks
+        case id, scriptId, scriptName, actionName, status, startTime, endTime, duration, exitCode, stdout, stderr, outputChunks
     }
 
     public init(from decoder: Decoder) throws {
@@ -79,6 +89,7 @@ public struct ScriptExecution: Identifiable, Codable, Sendable {
         id = try container.decode(UUID.self, forKey: .id)
         scriptId = try container.decode(UUID.self, forKey: .scriptId)
         scriptName = try container.decode(String.self, forKey: .scriptName)
+        actionName = try container.decodeIfPresent(String.self, forKey: .actionName)
         status = try container.decode(ExecutionStatus.self, forKey: .status)
         startTime = try container.decode(Date.self, forKey: .startTime)
         endTime = try container.decodeIfPresent(Date.self, forKey: .endTime)

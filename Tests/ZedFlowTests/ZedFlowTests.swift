@@ -94,6 +94,19 @@ struct ZedFlowTestRunner {
         testNotificationServiceFiltering()
         testLaunchAtLoginService()
 
+        print("\n--- Phase 6: CLI & Local IPC Integration ---")
+        testIPCProtocolSerialization()
+        await testIPCAppNotRunning()
+        await testIPCSocketRoundTrip()
+        await testIPCConcurrentRequests()
+
+        print("\n--- Phase 7: Script Actions & Flags ---")
+        testScriptActionModel()
+        testScriptActionBackwardCompatibility()
+        testExecutionWithActionArguments()
+        await testScriptStoreRunAction()
+        await testIPCRunAction()
+
         cleanup()
         print("\n=== Summary: \(passed) passed, \(failed) failed ===")
         if failed > 0 { exit(1) }
@@ -630,6 +643,366 @@ struct ZedFlowTestRunner {
         let service = LaunchAtLoginService()
         let desc = service.statusDescription
         check("LaunchAtLoginService reports valid status description", !desc.isEmpty)
+    }
+
+    // MARK: - Phase 6 Tests: CLI & Local IPC Integration
+
+    static func testIPCProtocolSerialization() {
+        let req = IPCRequest(command: .add, name: "Backup", path: "/tmp/b.sh", interpreter: "bash", waitForCompletion: true)
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        do {
+            let data = try encoder.encode(req)
+            let decodedReq = try decoder.decode(IPCRequest.self, from: data)
+            check("IPCRequest encodes and decodes accurately",
+                  decodedReq.command == .add && decodedReq.name == "Backup" && decodedReq.path == "/tmp/b.sh")
+
+            let resp = IPCResponse(success: true, message: "OK", exitCode: 0)
+            let respData = try encoder.encode(resp)
+            let decodedResp = try decoder.decode(IPCResponse.self, from: respData)
+            check("IPCResponse encodes and decodes accurately",
+                  decodedResp.success == true && decodedResp.message == "OK" && decodedResp.exitCode == 0)
+        } catch {
+            print("  ❌ FAIL: IPCProtocol Serialization — \(error)")
+            failed += 1
+        }
+    }
+
+    static func testIPCAppNotRunning() async {
+        let nonExistentSocket = "/tmp/zf_none_\(UUID().uuidString.prefix(8)).sock"
+        let client = IPCClient(socketPath: nonExistentSocket)
+        do {
+            _ = try await client.send(request: IPCRequest(command: .ping))
+            print("  ❌ FAIL: testIPCAppNotRunning did not throw error")
+            failed += 1
+        } catch let error as IPCError {
+            if case .appNotRunning = error {
+                check("IPCClient returns appNotRunning when socket does not exist", true)
+            } else {
+                check("IPCClient returns appNotRunning when socket does not exist", false)
+            }
+        } catch {
+            print("  ❌ FAIL: Unexpected error type — \(error)")
+            failed += 1
+        }
+    }
+
+    @MainActor
+    static func testIPCSocketRoundTrip() async {
+        let storageDir = tempDir.appendingPathComponent("ipc_storage_\(UUID())")
+        let storage = StorageService(baseDirectory: storageDir)
+        let store = ScriptStore(storageService: storage)
+
+        let socketPath = "/tmp/zf_test_\(UUID().uuidString.prefix(8)).sock"
+        let server = IPCServer(socketPath: socketPath, store: store)
+
+        do {
+            try server.start()
+            check("IPCServer starts and binds to socket", server.isRunning && FileManager.default.fileExists(atPath: socketPath))
+
+            let client = IPCClient(socketPath: socketPath)
+
+            // 1. Ping
+            let pingResp = try await client.send(request: IPCRequest(command: .ping))
+            check("IPC ping returns pong", pingResp.success && pingResp.message == "pong")
+
+            // 2. Empty list
+            let emptyListResp = try await client.send(request: IPCRequest(command: .list))
+            check("IPC list on empty store", emptyListResp.success && emptyListResp.scripts?.isEmpty == true)
+
+            // 3. Add script
+            let scriptPath = createTempScript("ipc_test.sh", contents: "#!/bin/sh\necho 'hello from ipc'\n")
+            let addResp = try await client.send(request: IPCRequest(command: .add, name: "IPCTest", path: scriptPath))
+            check("IPC add script creates script", addResp.success && addResp.script?.name == "IPCTest")
+
+            // 4. List script
+            let listResp = try await client.send(request: IPCRequest(command: .list))
+            check("IPC list shows added script", listResp.scripts?.count == 1 && listResp.scripts?[0].name == "IPCTest")
+
+            // 5. Status
+            let statusResp = try await client.send(request: IPCRequest(command: .status, name: "IPCTest"))
+            check("IPC status returns script details", statusResp.success && statusResp.script?.name == "IPCTest")
+
+            // 6. Run script
+            let runResp = try await client.send(request: IPCRequest(command: .run, name: "IPCTest", waitForCompletion: true))
+            check("IPC run executes and returns output",
+                  runResp.success &&
+                  runResp.exitCode == 0 &&
+                  runResp.execution?.stdout.contains("hello from ipc") == true)
+
+            // 7. History
+            let historyResp = try await client.send(request: IPCRequest(command: .history, name: "IPCTest"))
+            check("IPC history returns execution records",
+                  historyResp.success && historyResp.history?.count == 1)
+
+            // 8. Remove script
+            let removeResp = try await client.send(request: IPCRequest(command: .remove, name: "IPCTest"))
+            check("IPC remove deletes script", removeResp.success)
+
+            let afterRemoveList = try await client.send(request: IPCRequest(command: .list))
+            check("IPC list after remove is empty", afterRemoveList.scripts?.isEmpty == true)
+
+            server.stop()
+            check("IPCServer stops cleanly and removes socket", !server.isRunning && !FileManager.default.fileExists(atPath: socketPath))
+        } catch {
+            print("  ❌ FAIL: testIPCSocketRoundTrip — \(error)")
+            failed += 1
+            server.stop()
+        }
+    }
+
+    @MainActor
+    static func testIPCConcurrentRequests() async {
+        let storageDir = tempDir.appendingPathComponent("ipc_concurrent_storage_\(UUID())")
+        let storage = StorageService(baseDirectory: storageDir)
+        let store = ScriptStore(storageService: storage)
+
+        let socketPath = "/tmp/zf_conc_\(UUID().uuidString.prefix(8)).sock"
+        let server = IPCServer(socketPath: socketPath, store: store)
+
+        do {
+            try server.start()
+            let client = IPCClient(socketPath: socketPath)
+
+            // Dispatch 10 concurrent ping and list requests
+            await withTaskGroup(of: Bool.self) { group in
+                for _ in 0..<10 {
+                    group.addTask {
+                        if let resp = try? await client.send(request: IPCRequest(command: .ping)) {
+                            return resp.success
+                        }
+                        return false
+                    }
+                }
+                var successCount = 0
+                for await success in group {
+                    if success { successCount += 1 }
+                }
+                check("IPC handles concurrent requests cleanly", successCount == 10)
+            }
+
+            server.stop()
+        } catch {
+            print("  ❌ FAIL: testIPCConcurrentRequests — \(error)")
+            failed += 1
+            server.stop()
+        }
+    }
+
+    // MARK: - Phase 7 Tests: Script Actions & Flags
+
+    static func testScriptActionModel() {
+        let action = ScriptAction(
+            name: "Restart",
+            arguments: ["--mode", "graceful", "--timeout", "30"],
+            systemImage: "arrow.clockwise"
+        )
+        check("ScriptAction stores name and arguments correctly", action.name == "Restart" && action.arguments.count == 4 && action.systemImage == "arrow.clockwise")
+
+        do {
+            let data = try JSONEncoder().encode(action)
+            let decoded = try JSONDecoder().decode(ScriptAction.self, from: data)
+            check("ScriptAction encodes and decodes cleanly", decoded.name == action.name && decoded.arguments == action.arguments && decoded.systemImage == action.systemImage)
+        } catch {
+            check("ScriptAction Codable failed: \(error)", false)
+        }
+    }
+
+    static func testScriptActionBackwardCompatibility() {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        // Test 1: Script JSON without "actions" key (legacy V1 payload)
+        do {
+            let originalScript = Script(
+                name: "Legacy Script",
+                scriptPath: "/bin/echo",
+                interpreter: .automatic,
+                schedule: .manual
+            )
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            var jsonDict = try JSONSerialization.jsonObject(with: try encoder.encode(originalScript)) as! [String: Any]
+            jsonDict.removeValue(forKey: "actions")
+            let legacyData = try JSONSerialization.data(withJSONObject: jsonDict)
+
+            let legacyScript = try decoder.decode(Script.self, from: legacyData)
+            check("Legacy script decodes with empty actions array", legacyScript.actions.isEmpty)
+        } catch {
+            check("Legacy script decoding failed: \(error)", false)
+        }
+
+        // Test 2: ScriptExecution JSON without "actionName" key
+        let legacyExecutionJSON = """
+        {
+            "id": "22222222-2222-2222-2222-222222222222",
+            "scriptId": "11111111-1111-1111-1111-111111111111",
+            "scriptName": "Legacy Script",
+            "status": "success",
+            "startTime": "2026-01-01T00:00:00Z",
+            "duration": 1.2,
+            "exitCode": 0,
+            "stdout": "done",
+            "stderr": "",
+            "outputChunks": []
+        }
+        """
+
+        do {
+            let legacyExecution = try decoder.decode(ScriptExecution.self, from: legacyExecutionJSON.data(using: .utf8)!)
+            check("Legacy execution decodes with nil actionName", legacyExecution.actionName == nil)
+            check("Legacy execution displayName equals scriptName", legacyExecution.displayName == "Legacy Script")
+        } catch {
+            check("Legacy execution decoding failed: \(error)", false)
+        }
+
+        // Test 3: ScriptExecution with actionName
+        let actionExecution = ScriptExecution(
+            scriptId: UUID(),
+            scriptName: "Proxy",
+            actionName: "Start",
+            status: .success
+        )
+        check("Execution with actionName has correct displayName", actionExecution.displayName == "Proxy → Start")
+    }
+
+    static func testExecutionWithActionArguments() {
+        // Verify arguments with spaces are preserved safely as distinct elements
+        let scriptPath = createTempScript("action_args_test.sh", contents: """
+        #!/bin/sh
+        echo "argcount=$#"
+        echo "1=$1"
+        echo "2=$2"
+        echo "3=$3"
+        """)
+
+        let action = ScriptAction(
+            name: "Deploy",
+            arguments: ["--target", "production server", "--retries=3"],
+            systemImage: "bolt"
+        )
+
+        let script = Script(name: "Deployer", scriptPath: scriptPath, interpreter: .sh, actions: [action])
+        let runner = ProcessRunner()
+
+        do {
+            let (exec, _) = try runner.runAndWait(script: script, action: action)
+            check("Action execution succeeds with exit code 0", exec.status == .success && exec.exitCode == 0)
+            check("Action name recorded on execution record", exec.actionName == "Deploy")
+            check("Action displayName formatted correctly", exec.displayName == "Deployer → Deploy")
+            check("Argument count is exactly 3", exec.stdout.contains("argcount=3"))
+            check("First argument matches --target", exec.stdout.contains("1=--target"))
+            check("Second argument preserves space without splitting", exec.stdout.contains("2=production server"))
+            check("Third argument matches --retries=3", exec.stdout.contains("3=--retries=3"))
+        } catch {
+            check("Execution with action arguments failed: \(error)", false)
+        }
+    }
+
+    @MainActor
+    static func testScriptStoreRunAction() async {
+        let storageDir = tempDir.appendingPathComponent("store_action_storage_\(UUID())")
+        let storage = StorageService(baseDirectory: storageDir)
+        let store = ScriptStore(storageService: storage)
+
+        let scriptPath = createTempScript("store_action_test.sh", contents: """
+        #!/bin/sh
+        echo "Running action: $1"
+        """)
+
+        let action = ScriptAction(name: "Status", arguments: ["status"], systemImage: "chart.bar")
+        let script = Script(name: "ProxyService", scriptPath: scriptPath, interpreter: .sh, actions: [action])
+
+        do {
+            try await store.addScript(script)
+            store.runScript(script, action: action)
+
+            // Wait for completion
+            var attempts = 0
+            while store.isRunningScript[script.id] == true && attempts < 100 {
+                try? await Task.sleep(nanoseconds: 50_000_000)
+                attempts += 1
+            }
+
+            let latest = store.latestExecutions[script.id]
+            check("ScriptStore executes action successfully", latest?.status == .success)
+            check("ScriptStore records actionName in latest execution", latest?.actionName == "Status")
+            check("ScriptStore captures action output", latest?.stdout.contains("Running action: status") == true)
+
+            let history = await store.loadHistory(for: script)
+            check("History records actionName", history.first?.actionName == "Status")
+        } catch {
+            check("ScriptStore run action failed: \(error)", false)
+        }
+    }
+
+    @MainActor
+    static func testIPCRunAction() async {
+        let storageDir = tempDir.appendingPathComponent("ipc_action_storage_\(UUID())")
+        let storage = StorageService(baseDirectory: storageDir)
+        let store = ScriptStore(storageService: storage)
+
+        let scriptPath = createTempScript("ipc_action_test.sh", contents: """
+        #!/bin/sh
+        if [ "$1" = "on" ]; then
+            echo "Proxy is ON"
+            exit 0
+        elif [ "$1" = "off" ]; then
+            echo "Proxy is OFF"
+            exit 0
+        else
+            echo "Unknown command: $1" >&2
+            exit 1
+        fi
+        """)
+
+        let onAction = ScriptAction(name: "On", arguments: ["on"], systemImage: "power")
+        let offAction = ScriptAction(name: "Off", arguments: ["off"], systemImage: "power.circle")
+        let script = Script(name: "SuperProxy", scriptPath: scriptPath, interpreter: .sh, actions: [onAction, offAction])
+
+        let socketPath = "/tmp/zf_act_\(UUID().uuidString.prefix(8)).sock"
+        let server = IPCServer(socketPath: socketPath, store: store)
+
+        do {
+            try await store.addScript(script)
+            try server.start()
+            let client = IPCClient(socketPath: socketPath)
+
+            // 1. List scripts and verify action DTOs
+            let listResp = try await client.send(request: IPCRequest(command: .list))
+            check("IPC list response contains scripts", listResp.success && listResp.scripts?.count == 1)
+            let actions = listResp.scripts?.first?.actions ?? []
+            check("IPC list includes actions DTOs", actions.count == 2 && actions.map(\.name).contains("On") && actions.map(\.name).contains("Off"))
+
+            // 2. Run with valid action "On"
+            let runOnResp = try await client.send(request: IPCRequest(
+                command: .run,
+                name: "SuperProxy",
+                action: "On",
+                waitForCompletion: true
+            ))
+            check("IPC run with action 'On' succeeds", runOnResp.success && runOnResp.exitCode == 0)
+            check("IPC run execution has actionName 'On'", runOnResp.execution?.actionName == "On")
+            check("IPC run output contains Proxy is ON", runOnResp.execution?.stdout.contains("Proxy is ON") == true)
+
+            // 3. Run with invalid action name
+            let runBadResp = try await client.send(request: IPCRequest(
+                command: .run,
+                name: "SuperProxy",
+                action: "InvalidAction",
+                waitForCompletion: true
+            ))
+            check("IPC run with invalid action fails gracefully", !runBadResp.success && runBadResp.message?.contains("not found") == true)
+
+            server.stop()
+        } catch {
+            print("  ❌ FAIL: testIPCRunAction — \(error)")
+            failed += 1
+            server.stop()
+        }
     }
 }
 

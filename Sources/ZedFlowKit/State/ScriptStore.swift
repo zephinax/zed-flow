@@ -40,6 +40,8 @@ private final class LiveOutputBuffer: @unchecked Sendable {
 @Observable
 @MainActor
 public final class ScriptStore {
+    public static let shared = ScriptStore()
+
     public private(set) var scripts: [Script] = []
     public private(set) var activeExecutions: [UUID: ScriptExecution] = [:]
     public private(set) var latestExecutions: [UUID: ScriptExecution] = [:]
@@ -56,6 +58,7 @@ public final class ScriptStore {
     public let launchAtLoginService: LaunchAtLoginService
 
     @ObservationIgnored nonisolated(unsafe) private var wakeObserver: NSObjectProtocol?
+    @ObservationIgnored nonisolated(unsafe) public private(set) var ipcServer: IPCServer?
 
     public var runningCount: Int {
         isRunningScript.values.filter { $0 }.count
@@ -95,9 +98,28 @@ public final class ScriptStore {
     }
 
     deinit {
+        ipcServer?.stop()
         if let observer = wakeObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(observer)
         }
+    }
+
+    // MARK: - IPC Server
+
+    public func startIPCServer(socketPath: String = IPCProtocol.defaultSocketPath) {
+        guard ipcServer == nil else { return }
+        let server = IPCServer(socketPath: socketPath, store: self)
+        do {
+            try server.start()
+            self.ipcServer = server
+        } catch {
+            print("Failed to start IPC server: \(error)")
+        }
+    }
+
+    public func stopIPCServer() {
+        ipcServer?.stop()
+        ipcServer = nil
     }
 
     // MARK: - Script Management
@@ -113,6 +135,9 @@ public final class ScriptStore {
                 }
             }
             scheduler.reconcile(scripts: scripts)
+            if ipcServer == nil {
+                startIPCServer()
+            }
         } catch {
             errorMessage = "Failed to load scripts: \(error.localizedDescription)"
         }
@@ -175,7 +200,7 @@ public final class ScriptStore {
 
     // MARK: - Script Execution
 
-    public func runScript(_ script: Script) {
+    public func runScript(_ script: Script, action: ScriptAction? = nil) {
         guard isRunningScript[script.id] != true else { return }
 
         isRunningScript[script.id] = true
@@ -183,7 +208,7 @@ public final class ScriptStore {
         let buffer = LiveOutputBuffer()
 
         do {
-            let (initialExecution, handle) = try processRunner.run(script: script) { stream, text in
+            let (initialExecution, handle) = try processRunner.run(script: script, action: action) { stream, text in
                 let streamType: StreamType = (stream == .stdout ? .stdout : .stderr)
                 buffer.append(stream: streamType, text: text)
             }
@@ -251,6 +276,7 @@ public final class ScriptStore {
             let failedExecution = ScriptExecution(
                 scriptId: script.id,
                 scriptName: script.name,
+                actionName: action?.name,
                 status: .failed,
                 endTime: Date(),
                 duration: 0,

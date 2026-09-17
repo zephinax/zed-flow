@@ -8,7 +8,8 @@ let package = Package(
     ],
     products: [
         .library(name: "ZedFlowKit", targets: ["ZedFlowKit"]),
-        .executable(name: "ZedFlow", targets: ["ZedFlow"]),
+        .executable(name: "ZedFlowApp", targets: ["ZedFlow"]),
+        .executable(name: "zedflow", targets: ["ZedFlowCLI"]),
         .executable(name: "ZedFlowTests", targets: ["ZedFlowTests"])
     ],
     targets: [
@@ -20,6 +21,11 @@ let package = Package(
             name: "ZedFlow",
             dependencies: ["ZedFlowKit"],
             path: "Sources/ZedFlow"
+        ),
+        .executableTarget(
+            name: "ZedFlowCLI",
+            dependencies: ["ZedFlowKit"],
+            path: "Sources/ZedFlowCLI"
         ),
         .executableTarget(
             name: "ZedFlowTests",

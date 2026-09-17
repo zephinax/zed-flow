@@ -13,6 +13,12 @@ struct ScriptEditSheet: View {
     @State private var interpreter: InterpreterType = .automatic
     @State private var customInterpreterPath: String = ""
 
+    // Actions state
+    @State private var actions: [ScriptAction] = []
+    @State private var showingActionSheet: Bool = false
+    @State private var editingActionIndex: Int? = nil
+    @State private var editingAction: ScriptAction? = nil
+
     // Schedule state
     enum ScheduleType: String, CaseIterable, Identifiable {
         case manual = "Manual"
@@ -97,6 +103,110 @@ struct ScriptEditSheet: View {
                     Text("Script Details")
                 }
 
+                // Actions Section
+                Section {
+                    if actions.isEmpty {
+                        HStack {
+                            Text("No actions configured. The script will execute without extra flags.")
+                                .font(.system(size: 11))
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Button {
+                                editingAction = nil
+                                editingActionIndex = nil
+                                showingActionSheet = true
+                            } label: {
+                                Label("Add Action", systemImage: "plus")
+                            }
+                            .controlSize(.small)
+                        }
+                    } else {
+                        ForEach(actions.indices, id: \.self) { index in
+                            let action = actions[index]
+                            HStack(spacing: 8) {
+                                Image(systemName: action.systemImage)
+                                    .font(.system(size: 13))
+                                    .foregroundColor(.accentColor)
+                                    .frame(width: 18)
+
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(action.name)
+                                        .font(.system(size: 12, weight: .medium))
+                                    if !action.arguments.isEmpty {
+                                        Text(action.arguments.joined(separator: " "))
+                                            .font(.system(size: 10, design: .monospaced))
+                                            .foregroundColor(.secondary)
+                                            .lineLimit(1)
+                                    }
+                                }
+
+                                Spacer()
+
+                                // Move up
+                                Button {
+                                    if index > 0 {
+                                        actions.swapAt(index, index - 1)
+                                    }
+                                } label: {
+                                    Image(systemName: "chevron.up")
+                                        .font(.system(size: 10))
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(index == 0)
+                                .help("Move Up")
+
+                                // Move down
+                                Button {
+                                    if index < actions.count - 1 {
+                                        actions.swapAt(index, index + 1)
+                                    }
+                                } label: {
+                                    Image(systemName: "chevron.down")
+                                        .font(.system(size: 10))
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(index == actions.count - 1)
+                                .help("Move Down")
+
+                                // Edit
+                                Button {
+                                    editingActionIndex = index
+                                    editingAction = action
+                                    showingActionSheet = true
+                                } label: {
+                                    Image(systemName: "pencil")
+                                        .font(.system(size: 11))
+                                }
+                                .buttonStyle(.plain)
+                                .help("Edit Action")
+
+                                // Delete
+                                Button {
+                                    actions.remove(at: index)
+                                } label: {
+                                    Image(systemName: "trash")
+                                        .font(.system(size: 11))
+                                        .foregroundColor(.red)
+                                }
+                                .buttonStyle(.plain)
+                                .help("Delete Action")
+                            }
+                            .padding(.vertical, 2)
+                        }
+
+                        Button {
+                            editingAction = nil
+                            editingActionIndex = nil
+                            showingActionSheet = true
+                        } label: {
+                            Label("Add Action…", systemImage: "plus")
+                        }
+                        .controlSize(.small)
+                    }
+                } header: {
+                    Text("Actions / Flags")
+                }
+
                 Section {
                     Picker("Run Mode", selection: $scheduleType) {
                         ForEach(ScheduleType.allCases) { type in
@@ -144,9 +254,18 @@ struct ScriptEditSheet: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 14)
         }
-        .frame(width: 440, height: 460)
+        .frame(width: 480, height: 540)
         .onAppear {
             populateFields()
+        }
+        .sheet(isPresented: $showingActionSheet) {
+            ActionEditSheet(action: editingAction) { savedAction in
+                if let idx = editingActionIndex, idx < actions.count {
+                    actions[idx] = savedAction
+                } else {
+                    actions.append(savedAction)
+                }
+            }
         }
     }
 
@@ -156,6 +275,7 @@ struct ScriptEditSheet: View {
         scriptPath = script.scriptPath
         interpreter = script.interpreter
         customInterpreterPath = script.customInterpreterPath ?? ""
+        actions = script.actions
         notifyOnSuccess = script.notifyOnSuccess
         notifyOnFailure = script.notifyOnFailure
 
@@ -198,6 +318,7 @@ struct ScriptEditSheet: View {
             isEnabled: existingScript?.isEnabled ?? true,
             notifyOnSuccess: notifyOnSuccess,
             notifyOnFailure: notifyOnFailure,
+            actions: actions,
             createdAt: existingScript?.createdAt ?? Date(),
             updatedAt: Date()
         )
@@ -233,5 +354,147 @@ struct ScriptEditSheet: View {
         if panel.runModal() == .OK, let url = panel.url {
             customInterpreterPath = url.path
         }
+    }
+}
+
+// MARK: - Action Edit Sheet
+
+struct ActionEditSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let initialAction: ScriptAction?
+    let onSave: (ScriptAction) -> Void
+
+    @State private var name: String = ""
+    @State private var icon: String = "bolt"
+    @State private var arguments: [String] = []
+    @State private var newArgText: String = ""
+
+    init(action: ScriptAction? = nil, onSave: @escaping (ScriptAction) -> Void) {
+        self.initialAction = action
+        self.onSave = onSave
+    }
+
+    private var isValid: Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text(initialAction == nil ? "New Action" : "Edit Action")
+                    .font(.headline)
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 16)
+            .padding(.bottom, 12)
+
+            Divider()
+
+            Form {
+                Section("Action Details") {
+                    TextField("Name", text: $name, prompt: Text("e.g. On, Off, Status"))
+
+                    HStack {
+                        Text("Icon")
+                        Spacer()
+                        ActionIconPicker(selectedIcon: $icon)
+                    }
+                }
+
+                Section {
+                    if arguments.isEmpty {
+                        Text("No arguments specified. The script will be invoked with no additional arguments.")
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                    } else {
+                        ForEach(arguments.indices, id: \.self) { idx in
+                            HStack(spacing: 8) {
+                                Text("\(idx + 1).")
+                                    .font(.system(size: 11, design: .monospaced))
+                                    .foregroundColor(.secondary)
+                                    .frame(width: 20, alignment: .trailing)
+
+                                TextField("Argument", text: $arguments[idx])
+                                    .textFieldStyle(.roundedBorder)
+
+                                Button {
+                                    arguments.remove(at: idx)
+                                } label: {
+                                    Image(systemName: "minus.circle")
+                                        .foregroundColor(.red)
+                                }
+                                .buttonStyle(.plain)
+                                .help("Remove argument")
+                            }
+                        }
+                    }
+
+                    HStack {
+                        TextField("New argument (supports spaces)", text: $newArgText, prompt: Text("e.g. --verbose or status"))
+                            .textFieldStyle(.roundedBorder)
+                            .onSubmit {
+                                addArgument()
+                            }
+
+                        Button("Add") {
+                            addArgument()
+                        }
+                        .controlSize(.small)
+                        .disabled(newArgText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                } header: {
+                    Text("Arguments / Flags")
+                } footer: {
+                    Text("Each argument is passed as an isolated parameter without shell string escaping.")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                }
+            }
+            .formStyle(.grouped)
+            .scrollContentBackground(.hidden)
+
+            Divider()
+
+            HStack {
+                Button("Cancel") {
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+
+                Spacer()
+
+                Button(initialAction == nil ? "Add Action" : "Save Action") {
+                    let finalAction = ScriptAction(
+                        id: initialAction?.id ?? UUID(),
+                        name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+                        arguments: arguments.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty },
+                        systemImage: icon.isEmpty ? "bolt" : icon
+                    )
+                    onSave(finalAction)
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+                .buttonStyle(.borderedProminent)
+                .disabled(!isValid)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+        }
+        .frame(width: 420, height: 420)
+        .onAppear {
+            if let action = initialAction {
+                name = action.name
+                icon = action.systemImage
+                arguments = action.arguments
+            }
+        }
+    }
+
+    private func addArgument() {
+        let trimmed = newArgText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        arguments.append(trimmed)
+        newArgText = ""
     }
 }

@@ -25,6 +25,11 @@ struct MenuBarContentView: View {
                     .frame(width: 320)
             }
         }
+        .onAppear {
+            Task {
+                await store.loadScripts()
+            }
+        }
         .sheet(isPresented: $showingAddSheet) {
             ScriptEditSheet { newScript in
                 Task {
@@ -200,7 +205,7 @@ struct MenuBarContentView: View {
             .padding(.horizontal, 6)
             .padding(.vertical, 6)
         }
-        .frame(maxHeight: 360)
+        .frame(minHeight: min(max(CGFloat(store.scripts.count) * 60, 70), 360), maxHeight: 380)
     }
 
     // MARK: - Footer Bar

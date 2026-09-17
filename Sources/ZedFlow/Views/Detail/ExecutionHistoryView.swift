@@ -74,9 +74,22 @@ struct ExecutionHistoryView: View {
                             StatusIndicatorView(status: run.status)
 
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(formatDate(run.startTime))
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundColor(.primary)
+                                HStack(spacing: 4) {
+                                    Text(formatDate(run.startTime))
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundColor(.primary)
+                                    if let action = run.actionName, !action.isEmpty {
+                                        Text(action)
+                                            .font(.system(size: 9, weight: .semibold))
+                                            .foregroundColor(.accentColor)
+                                            .padding(.horizontal, 4)
+                                            .padding(.vertical, 1)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: 3)
+                                                    .fill(Color.accentColor.opacity(0.12))
+                                            )
+                                    }
+                                }
 
                                 HStack(spacing: 4) {
                                     if let duration = run.duration {

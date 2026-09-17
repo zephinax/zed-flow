@@ -38,6 +38,12 @@ struct ScriptDetailView: View {
 
             Divider()
 
+            // Actions Strip if script defines actions
+            if !script.actions.isEmpty {
+                actionsStrip
+                Divider()
+            }
+
             // Metadata Strip
             metadataStrip
 
@@ -121,33 +127,120 @@ struct ScriptDetailView: View {
                 Divider()
                     .frame(height: 12)
 
-                Button {
-                    if isRunning {
+                if isRunning {
+                    Button {
                         store.stopScript(script)
-                    } else {
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "stop.fill")
+                                .font(.system(size: 10, weight: .semibold))
+                            Text("Stop")
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .foregroundColor(.orange)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(Color(nsColor: .controlBackgroundColor))
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .help("Stop Script")
+                } else if script.actions.isEmpty {
+                    Button {
                         store.runScript(script)
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "play.fill")
+                                .font(.system(size: 10, weight: .semibold))
+                            Text("Run")
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .foregroundColor(.accentColor)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(Color(nsColor: .controlBackgroundColor))
+                        )
                     }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: isRunning ? "stop.fill" : "play.fill")
-                            .font(.system(size: 10, weight: .semibold))
-                        Text(isRunning ? "Stop" : "Run")
-                            .font(.system(size: 11, weight: .medium))
+                    .buttonStyle(.plain)
+                    .help("Run Script Now")
+                } else {
+                    Menu {
+                        ForEach(script.actions) { action in
+                            Button {
+                                store.runScript(script, action: action)
+                            } label: {
+                                Label(action.name, systemImage: action.systemImage)
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "play.fill")
+                                .font(.system(size: 10, weight: .semibold))
+                            Text("Run Action")
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .foregroundColor(.accentColor)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(Color(nsColor: .controlBackgroundColor))
+                        )
                     }
-                    .foregroundColor(isRunning ? .orange : .accentColor)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(Color(nsColor: .controlBackgroundColor))
-                    )
+                    .menuStyle(.borderlessButton)
+                    .help("Select Action to Run")
                 }
-                .buttonStyle(.plain)
-                .help(isRunning ? "Stop Script" : "Run Script Now")
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+
+    // MARK: - Actions Strip
+
+    private var actionsStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                Text("Actions:")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.secondary)
+
+                ForEach(script.actions) { action in
+                    let isThisActionRunning = isRunning && activeExecution?.actionName == action.name
+                    Button {
+                        if isThisActionRunning {
+                            store.stopScript(script)
+                        } else {
+                            store.runScript(script, action: action)
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: isThisActionRunning ? "stop.fill" : action.systemImage)
+                                .font(.system(size: 10))
+                            Text(action.name)
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .foregroundColor(isThisActionRunning ? .orange : .primary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(isThisActionRunning ? Color.orange.opacity(0.15) : Color(nsColor: .controlBackgroundColor))
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isRunning && !isThisActionRunning)
+                    .help(isThisActionRunning ? "Stop \(action.name)" : "Run \(action.name)")
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+        }
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.2))
     }
 
     // MARK: - Metadata Strip
@@ -160,6 +253,20 @@ struct ScriptDetailView: View {
                 Text(statusText)
                     .font(.system(size: 11, weight: .medium))
                     .foregroundColor(.primary)
+            }
+
+            // Action Name
+            if let action = activeExecution?.actionName, !action.isEmpty {
+                Divider()
+                    .frame(height: 12)
+                HStack(spacing: 4) {
+                    Text("Action:")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                    Text(action)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(.accentColor)
+                }
             }
 
             Divider()
@@ -248,7 +355,7 @@ struct ScriptDetailView: View {
         if duration < 1.0 {
             return String(format: "%.2fs", duration)
         } else if duration < 60 {
-            return String(format: "%.1fs", duration)
+            return String(format: "%.0fs", duration)
         } else {
             let mins = Int(duration) / 60
             let secs = Int(duration) % 60
