@@ -204,119 +204,118 @@ struct ScriptDetailView: View {
 
     private var actionsStrip: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                Text("Actions:")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(.secondary)
+            HStack(spacing: 8) {
+                Text("ACTIONS")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundColor(.secondary.opacity(0.8))
+                    .tracking(0.5)
+                    .padding(.trailing, 2)
 
                 ForEach(script.actions) { action in
                     let isThisActionRunning = isRunning && activeExecution?.actionName == action.name
-                    Button {
-                        if isThisActionRunning {
-                            store.stopScript(script)
-                        } else {
+                    ScriptActionButton(
+                        action: action,
+                        isRunning: isRunning,
+                        isCurrentActionRunning: isThisActionRunning,
+                        size: .regular,
+                        onExecute: {
                             store.runScript(script, action: action)
+                        },
+                        onStop: {
+                            store.stopScript(script)
                         }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: isThisActionRunning ? "stop.fill" : action.systemImage)
-                                .font(.system(size: 10))
-                            Text(action.name)
-                                .font(.system(size: 11, weight: .medium))
-                        }
-                        .foregroundColor(isThisActionRunning ? .orange : .primary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(isThisActionRunning ? Color.orange.opacity(0.15) : Color(nsColor: .controlBackgroundColor))
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(isRunning && !isThisActionRunning)
-                    .help(isThisActionRunning ? "Stop \(action.name)" : "Run \(action.name)")
+                    )
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
         }
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.2))
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.3))
     }
 
     // MARK: - Metadata Strip
 
     private var metadataStrip: some View {
-        HStack(spacing: 16) {
-            // Status
-            HStack(spacing: 6) {
-                StatusIndicatorView(status: executionStatus)
-                Text(statusText)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(.primary)
-            }
-
-            // Action Name
-            if let action = activeExecution?.actionName, !action.isEmpty {
-                Divider()
-                    .frame(height: 12)
-                HStack(spacing: 4) {
-                    Text("Action:")
-                        .font(.system(size: 10))
-                        .foregroundColor(.secondary)
-                    Text(action)
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(.accentColor)
-                }
-            }
-
-            Divider()
-                .frame(height: 12)
-
-            // Start Time
-            if let start = activeExecution?.startTime {
-                HStack(spacing: 4) {
-                    Text("Started:")
-                        .font(.system(size: 10))
-                        .foregroundColor(.secondary)
-                    Text(formatTime(start))
-                        .font(.system(size: 10, weight: .medium))
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 12) {
+                // Status
+                HStack(spacing: 5) {
+                    StatusIndicatorView(status: executionStatus)
+                    Text(statusText)
+                        .font(.system(size: 11, weight: .medium))
                         .foregroundColor(.primary)
                 }
-            }
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
 
-            // Duration
-            if let duration = activeExecution?.duration {
-                Divider()
-                    .frame(height: 12)
-                HStack(spacing: 4) {
-                    Text("Duration:")
-                        .font(.system(size: 10))
-                        .foregroundColor(.secondary)
-                    Text(formatDuration(duration))
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(.primary)
+                // Action Name
+                if let action = activeExecution?.actionName, !action.isEmpty {
+                    Divider()
+                        .frame(height: 12)
+                    HStack(spacing: 4) {
+                        Text("Action:")
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
+                        Text(action)
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(.accentColor)
+                    }
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                }
+
+                // Start Time
+                if let start = activeExecution?.startTime {
+                    Divider()
+                        .frame(height: 12)
+                    HStack(spacing: 4) {
+                        Text("Started:")
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
+                        Text(formatTime(start))
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.primary)
+                    }
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                }
+
+                // Duration
+                if let duration = activeExecution?.duration {
+                    Divider()
+                        .frame(height: 12)
+                    HStack(spacing: 4) {
+                        Text("Duration:")
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
+                        Text(formatDuration(duration))
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.primary)
+                    }
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                }
+
+                // Exit Code
+                if let code = activeExecution?.exitCode {
+                    Divider()
+                        .frame(height: 12)
+                    HStack(spacing: 4) {
+                        Text("Exit:")
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
+                        Text("\(code)")
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .foregroundColor(code == 0 ? .green : ((code == 2 || code == 3) ? .primary : .red))
+                    }
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
                 }
             }
-
-            // Exit Code
-            if let code = activeExecution?.exitCode {
-                Divider()
-                    .frame(height: 12)
-                HStack(spacing: 4) {
-                    Text("Exit:")
-                        .font(.system(size: 10))
-                        .foregroundColor(.secondary)
-                    Text("\(code)")
-                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                        .foregroundColor(code == 0 ? .green : .red)
-                }
-            }
-
-            Spacer()
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 6)
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.3))
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.15))
     }
 
     private var statusText: String {
@@ -324,7 +323,9 @@ struct ScriptDetailView: View {
         case .running:
             return "Running"
         case .success:
-            return "Success"
+            return "Active"
+        case .clear:
+            return "Clear"
         case .failed:
             return "Failed"
         case .stopped:

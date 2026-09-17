@@ -5,6 +5,7 @@ public enum ExecutionStatus: String, Codable, Sendable {
     case success
     case failed
     case stopped
+    case clear
 }
 
 public enum StreamType: String, Codable, Sendable {

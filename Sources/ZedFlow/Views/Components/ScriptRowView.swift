@@ -26,53 +26,17 @@ struct ScriptRowView: View {
         store.latestExecutions[script.id]
     }
 
-    private var subtitleText: String {
+    private var subtitleText: String? {
         var components: [String] = []
 
-        // Interpreter
-        switch script.interpreter {
-        case .automatic:
-            components.append("auto")
-        case .zsh:
-            components.append("zsh")
-        case .bash:
-            components.append("bash")
-        case .sh:
-            components.append("sh")
-        case .python3:
-            components.append("python3")
-        case .custom:
-            components.append("custom")
-        }
-
-        // Enabled state
+        // Only show special schedule or disabled state
         if !script.isEnabled {
             components.append("Disabled")
         } else if script.schedule != .manual {
             components.append(script.schedule.displayTitle)
         }
 
-        // Last execution status / duration / action
-        if let latest = latestExecution, !isRunning {
-            var latestInfo = ""
-            if let action = latest.actionName, !action.isEmpty {
-                latestInfo = "\(action): "
-            }
-            if let duration = latest.duration {
-                if duration < 1.0 {
-                    latestInfo += String(format: "%.1fs", duration)
-                } else if duration < 60 {
-                    latestInfo += String(format: "%.0fs", duration)
-                } else {
-                    let mins = Int(duration) / 60
-                    let secs = Int(duration) % 60
-                    latestInfo += "\(mins)m \(secs)s"
-                }
-                components.append(latestInfo)
-            }
-        }
-
-        return components.joined(separator: " • ")
+        return components.isEmpty ? nil : components.joined(separator: " • ")
     }
 
     var body: some View {
@@ -88,11 +52,13 @@ struct ScriptRowView: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
 
-                    Text(subtitleText)
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                    if let subtitle = subtitleText {
+                        Text(subtitle)
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
                 }
 
                 Spacer(minLength: 8)
@@ -151,31 +117,18 @@ struct ScriptRowView: View {
                     // Display up to 3 actions inline
                     ForEach(Array(script.actions.prefix(3))) { action in
                         let isThisActionRunning = isRunning && activeActionName == action.name
-                        Button {
-                            if isThisActionRunning {
-                                store.stopScript(script)
-                            } else {
+                        ScriptActionButton(
+                            action: action,
+                            isRunning: isRunning,
+                            isCurrentActionRunning: isThisActionRunning,
+                            size: .compact,
+                            onExecute: {
                                 store.runScript(script, action: action)
+                            },
+                            onStop: {
+                                store.stopScript(script)
                             }
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: isThisActionRunning ? "stop.fill" : action.systemImage)
-                                    .font(.system(size: 10, weight: .medium))
-                                Text(action.name)
-                                    .font(.system(size: 11, weight: .medium))
-                                    .lineLimit(1)
-                            }
-                            .foregroundColor(isThisActionRunning ? .orange : .primary)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 3)
-                            .background(
-                                RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                    .fill(isThisActionRunning ? Color.orange.opacity(0.15) : Color(nsColor: .controlBackgroundColor))
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(isRunning && !isThisActionRunning)
-                        .help(isThisActionRunning ? "Stop \(action.name)" : "Run \(action.name)")
+                        )
                     }
 
                     // Compact Overflow Menu if > 3 actions

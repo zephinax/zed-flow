@@ -26,7 +26,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelega
         // Create the status bar item
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
-            button.image = NSImage(systemSymbolName: "terminal", accessibilityDescription: "ZedFlow")
+            let img = NSImage(systemSymbolName: "terminal", accessibilityDescription: "ZedFlow")
+            img?.isTemplate = true
+            button.image = img
+            button.contentTintColor = nil
             button.action = #selector(togglePopover(_:))
             button.target = self
         }
@@ -47,7 +50,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelega
             await ScriptStore.shared.loadScripts()
         }
 
-        // Start polling the running-state for the status bar icon
+        // Start polling running count for terminal vs terminal.fill icon
         startIconPolling()
     }
 
@@ -57,11 +60,17 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelega
         guard let popover, let button = statusItem?.button else { return }
 
         if popover.isShown {
-            popover.performClose(sender)
+            popover.close()
         } else {
-            // Prevent immediate re-open when transient-close races with the button click
-            guard Date().timeIntervalSince(lastCloseTime) > 0.25 else { return }
+            // Guard against instantaneous event-loop bounce (within 80ms)
+            if Date().timeIntervalSince(lastCloseTime) < 0.08 {
+                return
+            }
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            NSApp.activate(ignoringOtherApps: true)
+            if let window = popover.contentViewController?.view.window {
+                window.makeKeyAndOrderFront(nil)
+            }
         }
     }
 
@@ -69,18 +78,36 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelega
 
     private func startIconPolling() {
         Task {
+            var lastRunning: Bool? = nil
+
             while !Task.isCancelled {
                 let running = ScriptStore.shared.runningCount > 0
-                statusItem?.button?.image = NSImage(
-                    systemSymbolName: running ? "terminal.fill" : "terminal",
-                    accessibilityDescription: "ZedFlow"
-                )
+
+                if running != lastRunning {
+                    lastRunning = running
+
+                    let img = NSImage(
+                        systemSymbolName: running ? "terminal.fill" : "terminal",
+                        accessibilityDescription: "ZedFlow"
+                    )
+                    img?.isTemplate = true
+                    statusItem?.button?.image = img
+                    statusItem?.button?.contentTintColor = nil
+                }
+
                 try? await Task.sleep(for: .seconds(1))
             }
         }
     }
 
     // MARK: - NSPopoverDelegate
+
+    public func popoverDidShow(_ notification: Notification) {
+        NSApp.activate(ignoringOtherApps: true)
+        if let window = popover?.contentViewController?.view.window {
+            window.makeKeyAndOrderFront(nil)
+        }
+    }
 
     public func popoverDidClose(_ notification: Notification) {
         lastCloseTime = Date()

@@ -34,7 +34,7 @@ public final class NotificationService: Sendable {
             return script.notifyOnSuccess
         case .failed:
             return script.notifyOnFailure
-        case .stopped, .running:
+        case .stopped, .running, .clear:
             return false
         }
     }

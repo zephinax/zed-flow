@@ -16,7 +16,13 @@ struct StatusIndicatorView: View {
                 Circle()
                     .fill(Color.green)
                     .frame(width: 8, height: 8)
-                    .help("Success")
+                    .help("Active / Set")
+            case .clear:
+                Circle()
+                    .fill(Color.white)
+                    .overlay(Circle().stroke(Color.gray.opacity(0.4), lineWidth: 1))
+                    .frame(width: 8, height: 8)
+                    .help("Clear / Inactive")
             case .failed:
                 Circle()
                     .fill(Color.red)
@@ -29,9 +35,10 @@ struct StatusIndicatorView: View {
                     .help("Stopped")
             case .none:
                 Circle()
-                    .fill(Color.secondary.opacity(0.35))
+                    .fill(Color.white)
+                    .overlay(Circle().stroke(Color.gray.opacity(0.4), lineWidth: 1))
                     .frame(width: 8, height: 8)
-                    .help("Idle")
+                    .help("Clear / Idle")
             }
         }
         .frame(width: 12, height: 12)

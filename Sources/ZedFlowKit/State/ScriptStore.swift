@@ -133,6 +133,18 @@ public final class ScriptStore {
                 if let latest = try? await storageService.loadExecutions(for: script.id).first {
                     latestExecutions[script.id] = latest
                 }
+                // Silently probe status in background if script defines a check or status action
+                Task.detached { [weak self, script, runner = self.processRunner] in
+                    guard let probeAction = script.actions.first(where: { $0.arguments == ["check"] }) ??
+                                            script.actions.first(where: { $0.arguments == ["status"] }) else { return }
+                    if let (exec, _) = try? runner.runAndWait(script: script, action: probeAction) {
+                        await MainActor.run { [weak self] in
+                            if self?.isRunningScript[script.id] != true {
+                                self?.latestExecutions[script.id] = exec
+                            }
+                        }
+                    }
+                }
             }
             scheduler.reconcile(scripts: scripts)
             if ipcServer == nil {

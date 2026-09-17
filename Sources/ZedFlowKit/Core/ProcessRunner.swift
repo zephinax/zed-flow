@@ -242,15 +242,12 @@ public final class ProcessRunner: Sendable {
         let fullStdout = accumulatedStdout.isEmpty ? trailingStdout : (accumulatedStdout + trailingStdout)
         let fullStderr = accumulatedStderr.isEmpty ? trailingStderr : (accumulatedStderr + trailingStderr)
 
-        // Determine final status
-        let status: ExecutionStatus
-        if handle.isCancelled {
-            status = .stopped
-        } else if exitCode == 0 {
-            status = .success
-        } else {
-            status = .failed
-        }
+        // Determine final status using universal ZedFlow protocol
+        let status = parseExecutionStatus(
+            exitCode: exitCode,
+            isCancelled: handle.isCancelled,
+            output: fullStdout + fullStderr
+        )
 
         return ScriptExecution(
             id: initialExecution.id,
@@ -461,6 +458,49 @@ public final class ProcessRunner: Sendable {
             if let text = String(data: data, encoding: .utf8) {
                 onOutput(stream, text)
             }
+        }
+    }
+
+    // MARK: - Universal Protocol Parser
+
+    /// Universal protocol parser for script execution results.
+    /// Supports:
+    /// 1. Directive tags in output: `[zedflow:status=<active|clear|failed>]` or `@zedflow:status=<...>`
+    /// 2. Standard exit codes (LSB conventions):
+    ///    - 0: .success (Active / Set / OK)
+    ///    - 2, 3: .clear (Clear / Inactive / Off)
+    ///    - other: .failed (Error)
+    func parseExecutionStatus(
+        exitCode: Int32,
+        isCancelled: Bool,
+        output: String
+    ) -> ExecutionStatus {
+        if isCancelled {
+            return .stopped
+        }
+
+        // Check for universal ZedFlow protocol directive: [zedflow:status=...] or @zedflow:status=...
+        let lower = output.lowercased()
+        if let match = lower.range(of: "\\[zedflow:status=([a-z]+)\\]", options: .regularExpression) ??
+                      lower.range(of: "@zedflow:status=([a-z]+)", options: .regularExpression) {
+            let matchedString = String(lower[match])
+            if matchedString.contains("active") || matchedString.contains("set") || matchedString.contains("ok") || matchedString.contains("success") {
+                return .success
+            } else if matchedString.contains("clear") || matchedString.contains("inactive") || matchedString.contains("off") {
+                return .clear
+            } else if matchedString.contains("failed") || matchedString.contains("error") {
+                return .failed
+            }
+        }
+
+        // Universal exit code standard (0 = active/success, 2/3 = clear/inactive, other = failed)
+        switch exitCode {
+        case 0:
+            return .success
+        case 2, 3:
+            return .clear
+        default:
+            return .failed
         }
     }
 }
