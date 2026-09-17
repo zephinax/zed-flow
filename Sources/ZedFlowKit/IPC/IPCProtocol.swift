@@ -15,30 +15,67 @@ public enum IPCCommand: String, Codable, Sendable {
     case status
     case history
     case ping
+
+    // Management & configuration commands
+    case update
+    case actionAdd
+    case actionUpdate
+    case actionRemove
+    case actionReorder
 }
 
 public struct IPCRequest: Codable, Sendable {
     public var command: IPCCommand
     public var name: String?
+    public var newName: String?
     public var action: String?
+    public var newActionName: String?
     public var path: String?
     public var interpreter: String?
+    public var customInterpreterPath: String?
     public var waitForCompletion: Bool?
+    public var isEnabled: Bool?
+    public var schedule: String?
+    public var notifyOnSuccess: Bool?
+    public var notifyOnFailure: Bool?
+    public var actionIcon: String?
+    public var actionArgs: [String]?
+    public var targetIndex: Int?
 
     public init(
         command: IPCCommand,
         name: String? = nil,
+        newName: String? = nil,
         action: String? = nil,
+        newActionName: String? = nil,
         path: String? = nil,
         interpreter: String? = nil,
-        waitForCompletion: Bool? = nil
+        customInterpreterPath: String? = nil,
+        waitForCompletion: Bool? = nil,
+        isEnabled: Bool? = nil,
+        schedule: String? = nil,
+        notifyOnSuccess: Bool? = nil,
+        notifyOnFailure: Bool? = nil,
+        actionIcon: String? = nil,
+        actionArgs: [String]? = nil,
+        targetIndex: Int? = nil
     ) {
         self.command = command
         self.name = name
+        self.newName = newName
         self.action = action
+        self.newActionName = newActionName
         self.path = path
         self.interpreter = interpreter
+        self.customInterpreterPath = customInterpreterPath
         self.waitForCompletion = waitForCompletion
+        self.isEnabled = isEnabled
+        self.schedule = schedule
+        self.notifyOnSuccess = notifyOnSuccess
+        self.notifyOnFailure = notifyOnFailure
+        self.actionIcon = actionIcon
+        self.actionArgs = actionArgs
+        self.targetIndex = targetIndex
     }
 }
 
@@ -73,8 +110,11 @@ public struct ScriptDTO: Codable, Sendable {
     public var name: String
     public var path: String
     public var interpreter: String
+    public var customInterpreterPath: String?
     public var schedule: String
     public var isEnabled: Bool
+    public var notifyOnSuccess: Bool
+    public var notifyOnFailure: Bool
     public var isRunning: Bool
     public var actions: [ScriptActionDTO]
     public var lastStatus: ExecutionStatus?
@@ -86,8 +126,11 @@ public struct ScriptDTO: Codable, Sendable {
         name: String,
         path: String,
         interpreter: String,
+        customInterpreterPath: String? = nil,
         schedule: String,
         isEnabled: Bool,
+        notifyOnSuccess: Bool = false,
+        notifyOnFailure: Bool = true,
         isRunning: Bool,
         actions: [ScriptActionDTO] = [],
         lastStatus: ExecutionStatus? = nil,
@@ -98,8 +141,11 @@ public struct ScriptDTO: Codable, Sendable {
         self.name = name
         self.path = path
         self.interpreter = interpreter
+        self.customInterpreterPath = customInterpreterPath
         self.schedule = schedule
         self.isEnabled = isEnabled
+        self.notifyOnSuccess = notifyOnSuccess
+        self.notifyOnFailure = notifyOnFailure
         self.isRunning = isRunning
         self.actions = actions
         self.lastStatus = lastStatus

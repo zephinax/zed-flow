@@ -368,7 +368,256 @@ public final class IPCServer: @unchecked Sendable {
                 script: makeDTO(script: script),
                 history: history
             )
+
+        case .update:
+            guard let name = request.name, !name.trimmingCharacters(in: .whitespaces).isEmpty else {
+                return IPCResponse(success: false, message: "Script name is required.")
+            }
+
+            guard var script = findScript(named: name) else {
+                return IPCResponse(success: false, message: "Script '\(name)' not found.")
+            }
+
+            // Rename
+            if let newName = request.newName?.trimmingCharacters(in: .whitespaces), !newName.isEmpty {
+                if newName.localizedCaseInsensitiveCompare(script.name) != .orderedSame && findScript(named: newName) != nil {
+                    return IPCResponse(success: false, message: "A script named '\(newName)' already exists.")
+                }
+                script.name = newName
+            }
+
+            // Path
+            if let path = request.path?.trimmingCharacters(in: .whitespaces), !path.isEmpty {
+                let expanded = NSString(string: path).expandingTildeInPath
+                guard FileManager.default.fileExists(atPath: expanded) else {
+                    return IPCResponse(success: false, message: "Script file not found at path: \(path)")
+                }
+                script.scriptPath = expanded
+            }
+
+            // Interpreter
+            if let interpStr = request.interpreter?.lowercased().trimmingCharacters(in: .whitespaces), !interpStr.isEmpty {
+                switch interpStr {
+                case "zsh": script.interpreter = .zsh
+                case "bash": script.interpreter = .bash
+                case "sh": script.interpreter = .sh
+                case "python", "python3": script.interpreter = .python3
+                case "custom": script.interpreter = .custom
+                default: script.interpreter = .automatic
+                }
+            }
+
+            if let customPath = request.customInterpreterPath {
+                script.customInterpreterPath = customPath.isEmpty ? nil : customPath
+            }
+
+            // Enabled state
+            if let isEnabled = request.isEnabled {
+                script.isEnabled = isEnabled
+            }
+
+            // Schedule
+            if let scheduleStr = request.schedule {
+                if let parsed = parseSchedule(from: scheduleStr) {
+                    script.schedule = parsed
+                } else {
+                    return IPCResponse(success: false, message: "Invalid schedule format '\(scheduleStr)'. Use 'manual', 'interval:<minutes>', or 'daily:<HH:mm>'.")
+                }
+            }
+
+            // Notifications
+            if let notifySuccess = request.notifyOnSuccess {
+                script.notifyOnSuccess = notifySuccess
+            }
+            if let notifyFailure = request.notifyOnFailure {
+                script.notifyOnFailure = notifyFailure
+            }
+
+            script.updatedAt = Date()
+
+            do {
+                try await store.updateScript(script)
+                return IPCResponse(
+                    success: true,
+                    message: "Successfully updated script '\(script.name)'.",
+                    script: makeDTO(script: script)
+                )
+            } catch {
+                return IPCResponse(success: false, message: "Failed to update script: \(error.localizedDescription)")
+            }
+
+        case .actionAdd:
+            guard let name = request.name, !name.trimmingCharacters(in: .whitespaces).isEmpty else {
+                return IPCResponse(success: false, message: "Script name is required.")
+            }
+
+            guard var script = findScript(named: name) else {
+                return IPCResponse(success: false, message: "Script '\(name)' not found.")
+            }
+
+            guard let actionName = request.action?.trimmingCharacters(in: .whitespaces), !actionName.isEmpty else {
+                return IPCResponse(success: false, message: "Action name is required.")
+            }
+
+            if script.actions.contains(where: { $0.name.localizedCaseInsensitiveCompare(actionName) == .orderedSame }) {
+                return IPCResponse(success: false, message: "Action '\(actionName)' already exists on script '\(script.name)'.")
+            }
+
+            let newAction = ScriptAction(
+                name: actionName,
+                arguments: request.actionArgs ?? [],
+                systemImage: request.actionIcon?.isEmpty == false ? request.actionIcon! : "bolt"
+            )
+
+            script.actions.append(newAction)
+            script.updatedAt = Date()
+
+            do {
+                try await store.updateScript(script)
+                return IPCResponse(
+                    success: true,
+                    message: "Added action '\(actionName)' to script '\(script.name)'.",
+                    script: makeDTO(script: script)
+                )
+            } catch {
+                return IPCResponse(success: false, message: "Failed to save action: \(error.localizedDescription)")
+            }
+
+        case .actionUpdate:
+            guard let name = request.name, !name.trimmingCharacters(in: .whitespaces).isEmpty else {
+                return IPCResponse(success: false, message: "Script name is required.")
+            }
+
+            guard var script = findScript(named: name) else {
+                return IPCResponse(success: false, message: "Script '\(name)' not found.")
+            }
+
+            guard let targetAction = request.action?.trimmingCharacters(in: .whitespaces), !targetAction.isEmpty else {
+                return IPCResponse(success: false, message: "Target action name is required.")
+            }
+
+            guard let actionIndex = script.actions.firstIndex(where: {
+                $0.name.localizedCaseInsensitiveCompare(targetAction) == .orderedSame
+            }) else {
+                return IPCResponse(success: false, message: "Action '\(targetAction)' not found on script '\(script.name)'.")
+            }
+
+            if let newActionName = request.newActionName?.trimmingCharacters(in: .whitespaces), !newActionName.isEmpty {
+                script.actions[actionIndex].name = newActionName
+            }
+
+            if let newArgs = request.actionArgs {
+                script.actions[actionIndex].arguments = newArgs
+            }
+
+            if let newIcon = request.actionIcon, !newIcon.isEmpty {
+                script.actions[actionIndex].systemImage = newIcon
+            }
+
+            script.updatedAt = Date()
+
+            do {
+                try await store.updateScript(script)
+                return IPCResponse(
+                    success: true,
+                    message: "Updated action '\(script.actions[actionIndex].name)' on script '\(script.name)'.",
+                    script: makeDTO(script: script)
+                )
+            } catch {
+                return IPCResponse(success: false, message: "Failed to save action: \(error.localizedDescription)")
+            }
+
+        case .actionRemove:
+            guard let name = request.name, !name.trimmingCharacters(in: .whitespaces).isEmpty else {
+                return IPCResponse(success: false, message: "Script name is required.")
+            }
+
+            guard var script = findScript(named: name) else {
+                return IPCResponse(success: false, message: "Script '\(name)' not found.")
+            }
+
+            guard let targetAction = request.action?.trimmingCharacters(in: .whitespaces), !targetAction.isEmpty else {
+                return IPCResponse(success: false, message: "Action name is required.")
+            }
+
+            guard let actionIndex = script.actions.firstIndex(where: {
+                $0.name.localizedCaseInsensitiveCompare(targetAction) == .orderedSame
+            }) else {
+                return IPCResponse(success: false, message: "Action '\(targetAction)' not found on script '\(script.name)'.")
+            }
+
+            let removed = script.actions.remove(at: actionIndex)
+            script.updatedAt = Date()
+
+            do {
+                try await store.updateScript(script)
+                return IPCResponse(
+                    success: true,
+                    message: "Removed action '\(removed.name)' from script '\(script.name)'.",
+                    script: makeDTO(script: script)
+                )
+            } catch {
+                return IPCResponse(success: false, message: "Failed to remove action: \(error.localizedDescription)")
+            }
+
+        case .actionReorder:
+            guard let name = request.name, !name.trimmingCharacters(in: .whitespaces).isEmpty else {
+                return IPCResponse(success: false, message: "Script name is required.")
+            }
+
+            guard var script = findScript(named: name) else {
+                return IPCResponse(success: false, message: "Script '\(name)' not found.")
+            }
+
+            guard let targetAction = request.action?.trimmingCharacters(in: .whitespaces), !targetAction.isEmpty else {
+                return IPCResponse(success: false, message: "Action name is required.")
+            }
+
+            guard let currentIndex = script.actions.firstIndex(where: {
+                $0.name.localizedCaseInsensitiveCompare(targetAction) == .orderedSame
+            }) else {
+                return IPCResponse(success: false, message: "Action '\(targetAction)' not found on script '\(script.name)'.")
+            }
+
+            guard let requestedTarget = request.targetIndex else {
+                return IPCResponse(success: false, message: "Target index is required for reordering.")
+            }
+
+            let clampedTarget = max(0, min(requestedTarget, script.actions.count - 1))
+            let action = script.actions.remove(at: currentIndex)
+            script.actions.insert(action, at: clampedTarget)
+            script.updatedAt = Date()
+
+            do {
+                try await store.updateScript(script)
+                return IPCResponse(
+                    success: true,
+                    message: "Moved action '\(action.name)' to position \(clampedTarget + 1).",
+                    script: makeDTO(script: script)
+                )
+            } catch {
+                return IPCResponse(success: false, message: "Failed to reorder action: \(error.localizedDescription)")
+            }
         }
+    }
+
+    private func parseSchedule(from string: String) -> ScheduleConfig? {
+        let trimmed = string.trimmingCharacters(in: .whitespaces).lowercased()
+        if trimmed == "manual" {
+            return .manual
+        } else if trimmed.hasPrefix("interval:") || trimmed.hasPrefix("interval ") {
+            let part = trimmed.replacingOccurrences(of: "interval:", with: "").replacingOccurrences(of: "interval ", with: "")
+            if let mins = Int(part.trimmingCharacters(in: .whitespaces)), mins > 0 {
+                return .interval(minutes: mins)
+            }
+        } else if trimmed.hasPrefix("daily:") || trimmed.hasPrefix("daily ") {
+            let part = trimmed.replacingOccurrences(of: "daily:", with: "").replacingOccurrences(of: "daily ", with: "")
+            let components = part.split(separator: ":").compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
+            if components.count == 2, components[0] >= 0, components[0] < 24, components[1] >= 0, components[1] < 60 {
+                return .daily(hour: components[0], minute: components[1])
+            }
+        }
+        return nil
     }
 
     @MainActor
@@ -387,8 +636,11 @@ public final class IPCServer: @unchecked Sendable {
             name: script.name,
             path: script.scriptPath,
             interpreter: script.interpreter.rawValue,
+            customInterpreterPath: script.customInterpreterPath,
             schedule: script.schedule.displayTitle,
             isEnabled: script.isEnabled,
+            notifyOnSuccess: script.notifyOnSuccess,
+            notifyOnFailure: script.notifyOnFailure,
             isRunning: isRunning,
             actions: script.actions.map { ScriptActionDTO(from: $0) },
             lastStatus: isRunning ? .running : latest?.status,

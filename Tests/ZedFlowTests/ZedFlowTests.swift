@@ -106,6 +106,7 @@ struct ZedFlowTestRunner {
         testExecutionWithActionArguments()
         await testScriptStoreRunAction()
         await testIPCRunAction()
+        await testIPCConfigurationAndActionManagement()
 
         cleanup()
         print("\n=== Summary: \(passed) passed, \(failed) failed ===")
@@ -1000,6 +1001,116 @@ struct ZedFlowTestRunner {
             server.stop()
         } catch {
             print("  ❌ FAIL: testIPCRunAction — \(error)")
+            failed += 1
+            server.stop()
+        }
+    }
+
+    static func testIPCConfigurationAndActionManagement() async {
+        let storage = StorageService(baseDirectory: tempDir.appendingPathComponent("ipc-config-\(UUID().uuidString)"))
+        let store = await MainActor.run { ScriptStore(storageService: storage) }
+        let socketPath = "/tmp/zedflow-test-config-\(UUID().uuidString).sock"
+        let server = IPCServer(socketPath: socketPath, store: store)
+
+        do {
+            try server.start()
+            let client = IPCClient(socketPath: socketPath)
+
+            let scriptPath = createTempScript("proxy_config_test.sh", contents: """
+            #!/bin/sh
+            echo "Proxy config test"
+            """)
+
+            // 1. Add script
+            let addResp = try await client.send(request: IPCRequest(
+                command: .add,
+                name: "ConfigProxy",
+                path: scriptPath,
+                interpreter: "sh"
+            ))
+            check("IPC add script for config succeeds", addResp.success)
+
+            // 2. Add actions
+            let addAct1 = try await client.send(request: IPCRequest(
+                command: .actionAdd,
+                name: "ConfigProxy",
+                action: "Start",
+                actionIcon: "power",
+                actionArgs: ["start", "--fast"]
+            ))
+            check("IPC actionAdd 'Start' succeeds", addAct1.success)
+            check("Script now has 1 action", addAct1.script?.actions.count == 1)
+            check("Action arguments preserved", addAct1.script?.actions.first?.arguments == ["start", "--fast"])
+
+            let addAct2 = try await client.send(request: IPCRequest(
+                command: .actionAdd,
+                name: "ConfigProxy",
+                action: "Stop",
+                actionIcon: "power.circle",
+                actionArgs: ["stop"]
+            ))
+            check("IPC actionAdd 'Stop' succeeds", addAct2.success)
+            check("Script now has 2 actions", addAct2.script?.actions.count == 2)
+
+            // 3. Update action (rename and change args)
+            let updateAct = try await client.send(request: IPCRequest(
+                command: .actionUpdate,
+                name: "ConfigProxy",
+                action: "Start",
+                newActionName: "Enable",
+                actionIcon: "play.fill",
+                actionArgs: ["enable", "--mode=turbo"]
+            ))
+            check("IPC actionUpdate succeeds", updateAct.success)
+            check("Action renamed to Enable", updateAct.script?.actions.first?.name == "Enable")
+            check("Action arguments updated", updateAct.script?.actions.first?.arguments == ["enable", "--mode=turbo"])
+            check("Action icon updated", updateAct.script?.actions.first?.systemImage == "play.fill")
+
+            // 4. Reorder actions
+            let reorderResp = try await client.send(request: IPCRequest(
+                command: .actionReorder,
+                name: "ConfigProxy",
+                action: "Stop",
+                targetIndex: 0
+            ))
+            check("IPC actionReorder succeeds", reorderResp.success)
+            check("Stop is now at index 0", reorderResp.script?.actions.first?.name == "Stop")
+
+            // 5. Update script configuration (rename, schedule, notifications, disabled)
+            let updateScriptResp = try await client.send(request: IPCRequest(
+                command: .update,
+                name: "ConfigProxy",
+                newName: "ConfigProxyV2",
+                isEnabled: false,
+                schedule: "interval:45",
+                notifyOnSuccess: true,
+                notifyOnFailure: false
+            ))
+            check("IPC update script succeeds", updateScriptResp.success)
+            check("Script renamed to ConfigProxyV2", updateScriptResp.script?.name == "ConfigProxyV2")
+            check("Script isEnabled is false", updateScriptResp.script?.isEnabled == false)
+            check("Script schedule is Every 45m", updateScriptResp.script?.schedule.contains("45") == true)
+            check("Script notifyOnSuccess is true", updateScriptResp.script?.notifyOnSuccess == true)
+            check("Script notifyOnFailure is false", updateScriptResp.script?.notifyOnFailure == false)
+
+            // 6. Remove action
+            let removeActResp = try await client.send(request: IPCRequest(
+                command: .actionRemove,
+                name: "ConfigProxyV2",
+                action: "Stop"
+            ))
+            check("IPC actionRemove succeeds", removeActResp.success)
+            check("Script now has 1 action left", removeActResp.script?.actions.count == 1)
+            check("Remaining action is Enable", removeActResp.script?.actions.first?.name == "Enable")
+
+            // 7. Status inspection returns complete metadata
+            let statusResp = try await client.send(request: IPCRequest(command: .status, name: "ConfigProxyV2"))
+            check("Status inspection returns valid DTO", statusResp.success && statusResp.script != nil)
+            check("Status inspection contains correct action", statusResp.script?.actions.first?.name == "Enable")
+
+            server.stop()
+        } catch {
+            print("  ❌ FAIL: testIPCConfigurationAndActionManagement — \(error)")
             failed += 1
             server.stop()
         }
