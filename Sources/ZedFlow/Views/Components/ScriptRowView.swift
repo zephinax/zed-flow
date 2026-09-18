@@ -119,20 +119,18 @@ struct ScriptRowView: View {
                         }
                     }
                 } label: {
-                    HStack(spacing: 4) {
+                    HStack(spacing: 3) {
                         Image(systemName: "play.fill")
-                            .font(.system(size: 8, weight: .semibold))
-                        Text("Actions")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.system(size: 9, weight: .semibold))
                         Image(systemName: "chevron.down")
                             .font(.system(size: 7, weight: .bold))
                             .foregroundColor(.secondary)
                     }
                     .foregroundColor(.primary)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3.5)
+                    .frame(height: 22)
+                    .padding(.horizontal, 6)
                     .background(
-                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        Capsule()
                             .fill(Color(nsColor: .controlBackgroundColor))
                     )
                 }
