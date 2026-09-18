@@ -38,12 +38,6 @@ struct ScriptDetailView: View {
 
             Divider()
 
-            // Actions Strip if script defines actions
-            if !script.actions.isEmpty {
-                actionsStrip
-                Divider()
-            }
-
             // Metadata Strip
             metadataStrip
 
@@ -180,8 +174,11 @@ struct ScriptDetailView: View {
                         HStack(spacing: 4) {
                             Image(systemName: "play.fill")
                                 .font(.system(size: 10, weight: .semibold))
-                            Text("Run Action")
+                            Text("Actions")
                                 .font(.system(size: 11, weight: .medium))
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundColor(.secondary)
                         }
                         .foregroundColor(.accentColor)
                         .padding(.horizontal, 8)
@@ -198,39 +195,6 @@ struct ScriptDetailView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-    }
-
-    // MARK: - Actions Strip
-
-    private var actionsStrip: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                Text("ACTIONS")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundColor(.secondary.opacity(0.8))
-                    .tracking(0.5)
-                    .padding(.trailing, 2)
-
-                ForEach(script.actions) { action in
-                    let isThisActionRunning = isRunning && activeExecution?.actionName == action.name
-                    ScriptActionButton(
-                        action: action,
-                        isRunning: isRunning,
-                        isCurrentActionRunning: isThisActionRunning,
-                        size: .regular,
-                        onExecute: {
-                            store.runScript(script, action: action)
-                        },
-                        onStop: {
-                            store.stopScript(script)
-                        }
-                    )
-                }
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 7)
-        }
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.3))
     }
 
     // MARK: - Metadata Strip

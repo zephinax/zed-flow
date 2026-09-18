@@ -40,8 +40,8 @@ struct ScriptRowView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            // Main row header
+        HStack(spacing: 10) {
+            // Main clickable info area (navigates to detail view)
             HStack(spacing: 10) {
                 StatusIndicatorView(status: executionStatus)
 
@@ -61,106 +61,97 @@ struct ScriptRowView: View {
                     }
                 }
 
-                Spacer(minLength: 8)
+                Spacer(minLength: 4)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                onSelect(script)
+            }
 
-                if isRunning {
-                    // Running state: Stop button
-                    Button {
-                        store.stopScript(script)
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "stop.fill")
-                                .font(.system(size: 9, weight: .bold))
-                            if let action = activeActionName {
-                                Text(action)
-                                    .font(.system(size: 10, weight: .medium))
-                            }
+            // Running state or Action / Run Controls
+            if isRunning {
+                // Running state: Stop button
+                Button {
+                    store.stopScript(script)
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "stop.fill")
+                            .font(.system(size: 9, weight: .bold))
+                        if let action = activeActionName {
+                            Text(action)
+                                .font(.system(size: 10, weight: .medium))
                         }
-                        .foregroundColor(.orange)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
-                        .background(
-                            Capsule()
-                                .fill(Color.orange.opacity(0.15))
-                        )
                     }
-                    .buttonStyle(.plain)
-                    .help("Stop Running Script")
-                } else if script.actions.isEmpty {
-                    // Standard single Run button when script has no actions
-                    Button {
-                        store.runScript(script)
-                    } label: {
-                        Image(systemName: "play.fill")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundColor(.primary)
-                            .frame(width: 22, height: 22)
-                            .background(
-                                Circle()
-                                    .fill(Color(nsColor: .controlBackgroundColor))
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .help("Run Script")
+                    .foregroundColor(.orange)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(
+                        Capsule()
+                            .fill(Color.orange.opacity(0.15))
+                    )
                 }
+                .buttonStyle(.plain)
+                .help("Stop Running Script")
+            } else if script.actions.isEmpty {
+                // Standard single Run button when script has no actions
+                Button {
+                    store.runScript(script)
+                } label: {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(.primary)
+                        .frame(width: 22, height: 22)
+                        .background(
+                            Circle()
+                                .fill(Color(nsColor: .controlBackgroundColor))
+                        )
+                }
+                .buttonStyle(.plain)
+                .help("Run Script")
+            } else {
+                // Single dropdown menu showing actions
+                Menu {
+                    ForEach(script.actions) { action in
+                        Button {
+                            store.runScript(script, action: action)
+                        } label: {
+                            Label(action.name, systemImage: action.systemImage)
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 8, weight: .semibold))
+                        Text("Actions")
+                            .font(.system(size: 11, weight: .medium))
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 7, weight: .bold))
+                            .foregroundColor(.secondary)
+                    }
+                    .foregroundColor(.primary)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3.5)
+                    .background(
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .fill(Color(nsColor: .controlBackgroundColor))
+                    )
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .help("Select Action to Run")
+            }
 
-                // Chevron to view details
+            // Chevron to view details
+            Button {
+                onSelect(script)
+            } label: {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundColor(.secondary.opacity(isHovered ? 0.8 : 0.3))
                     .frame(width: 12)
             }
-
-            // Action Buttons Bar (when script defines actions)
-            if !script.actions.isEmpty {
-                HStack(spacing: 6) {
-                    // Display up to 3 actions inline
-                    ForEach(Array(script.actions.prefix(3))) { action in
-                        let isThisActionRunning = isRunning && activeActionName == action.name
-                        ScriptActionButton(
-                            action: action,
-                            isRunning: isRunning,
-                            isCurrentActionRunning: isThisActionRunning,
-                            size: .compact,
-                            onExecute: {
-                                store.runScript(script, action: action)
-                            },
-                            onStop: {
-                                store.stopScript(script)
-                            }
-                        )
-                    }
-
-                    // Compact Overflow Menu if > 3 actions
-                    if script.actions.count > 3 {
-                        Menu {
-                            ForEach(Array(script.actions.dropFirst(3))) { overflowAction in
-                                Button {
-                                    store.runScript(script, action: overflowAction)
-                                } label: {
-                                    Label(overflowAction.name, systemImage: overflowAction.systemImage)
-                                }
-                                .disabled(isRunning)
-                            }
-                        } label: {
-                            Image(systemName: "ellipsis")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundColor(.secondary)
-                                .frame(width: 20, height: 20)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                        .fill(Color(nsColor: .controlBackgroundColor))
-                                )
-                        }
-                        .menuStyle(.borderlessButton)
-                        .frame(width: 20)
-                        .help("More Actions")
-                    }
-
-                    Spacer()
-                }
-                .padding(.leading, 22) // align with text under indicator
-            }
+            .buttonStyle(.plain)
+            .help("View Script Details")
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
@@ -168,10 +159,6 @@ struct ScriptRowView: View {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .fill(isHovered ? Color(nsColor: .selectedContentBackgroundColor).opacity(0.1) : Color.clear)
         )
-        .contentShape(Rectangle())
-        .onTapGesture {
-            onSelect(script)
-        }
         .onHover { hovering in
             isHovered = hovering
         }
