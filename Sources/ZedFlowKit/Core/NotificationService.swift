@@ -1,5 +1,5 @@
 import Foundation
-import UserNotifications
+@preconcurrency import UserNotifications
 
 public final class NotificationService: Sendable {
     public static let shared = NotificationService()

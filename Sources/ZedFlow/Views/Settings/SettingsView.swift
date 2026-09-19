@@ -1,6 +1,6 @@
 import SwiftUI
 import AppKit
-import UserNotifications
+@preconcurrency import UserNotifications
 import ZedFlowKit
 
 struct SettingsView: View {
