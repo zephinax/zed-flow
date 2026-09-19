@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Show Swift & OS Version
+        run: |
+          swift --version
+          sw_vers
+
+      - name: Build Package
+        run: swift build -v
+
+      - name: Run ZedFlow Test Suite
+        run: swift run ZedFlowTests
+
+      - name: Build Production Release
+        run: swift build -c release -v
