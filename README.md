@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/zephinax/zed-flow/main/Config/Icon.png" alt="ZedFlow Logo" width="100" onerror="this.style.display='none'"/>
+  <img src="Config/Icon.png" alt="ZedFlow Logo" width="120"/>
 </p>
 
 <h1 align="center">ZedFlow</h1>
@@ -16,6 +16,28 @@
   <a href="#testing"><img src="https://img.shields.io/badge/tests-103%20passed-success.svg?style=flat-square" alt="103 Passed Tests"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg?style=flat-square" alt="License: MIT"></a>
   <a href="https://github.com/zephinax/zed-flow"><img src="https://img.shields.io/badge/architecture-Universal%20(ARM%20%2B%20x86)-purple.svg?style=flat-square" alt="Universal Binary"></a>
+</p>
+
+---
+
+## 📸 Screenshots
+
+<p align="center">
+  <img src="docs/screenshots/menu-bar-actions.png" alt="Menu Bar Popover & Actions" width="46%"/>
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/new-script-config.png" alt="New Script Configuration" width="46%"/>
+</p>
+<p align="center">
+  <em>Left: Compact menu bar popover with multi-action workflows. Right: Script configuration modal.</em>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/execution-history.png" alt="Execution History & Output" width="46%"/>
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/live-console-directives.png" alt="Real-time Streaming Console & Status" width="46%"/>
+</p>
+<p align="center">
+  <em>Left: Persistent execution history inspection. Right: Real-time console with universal status protocol.</em>
 </p>
 
 ---
