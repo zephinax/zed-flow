@@ -1,0 +1,57 @@
+name: "🐛 Bug Report"
+description: File a bug report to help us improve ZedFlow
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report an issue! Please check existing issues first to avoid duplicates.
+  - type: input
+    id: version
+    attributes:
+      label: ZedFlow Version
+      description: What version of ZedFlow are you running? (e.g. v1.0.0, or git commit SHA)
+      placeholder: "e.g. 1.0.0"
+    validations:
+      required: true
+  - type: input
+    id: macos-version
+    attributes:
+      label: macOS Version & Architecture
+      description: What macOS version and hardware are you using?
+      placeholder: "e.g. macOS 14.5 (Sonoma) on Apple Silicon M2"
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the Bug
+      description: A clear and concise description of what the bug is.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Steps to reproduce the behavior.
+      placeholder: |
+        1. Open ZedFlow
+        2. Add script '...'
+        3. Click 'Run'
+        4. See error
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: A clear and concise description of what you expected to happen.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Logs or Output
+      description: Please paste any relevant logs from the ZedFlow detail console or `zedflow run <script>` CLI output.
+      render: shell

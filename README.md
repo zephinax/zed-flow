@@ -9,6 +9,8 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/zephinax/zed-flow/actions/workflows/ci.yml"><img src="https://github.com/zephinax/zed-flow/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI Status"></a>
+  <a href="https://github.com/zephinax/zed-flow/releases/latest"><img src="https://img.shields.io/github/v/release/zephinax/zed-flow?style=flat-square" alt="Latest Release"></a>
   <a href="#features"><img src="https://img.shields.io/badge/platform-macOS%2014.0%2B-blue.svg?style=flat-square" alt="Platform: macOS 14.0+"></a>
   <a href="#features"><img src="https://img.shields.io/badge/Swift-6.0-F05138.svg?style=flat-square&logo=swift" alt="Swift 6.0"></a>
   <a href="#testing"><img src="https://img.shields.io/badge/tests-103%20passed-success.svg?style=flat-square" alt="103 Passed Tests"></a>
@@ -80,7 +82,20 @@ Scripts can communicate dynamic state directly to ZedFlow using simple output di
 - macOS 14.0 (Sonoma) or newer
 - Swift 6.0+ (Xcode 16+ or Command Line Tools)
 
-### Build & Install from Source
+### Option 1: Download Pre-built Universal Binary (Recommended)
+
+1. Download the latest `ZedFlow-vX.Y.Z-macOS-universal.zip` from [GitHub Releases](https://github.com/zephinax/zed-flow/releases/latest).
+2. Unzip and drag `ZedFlow.app` into `/Applications`.
+3. (Optional) Copy or symlink `zedflow` to `/usr/local/bin/zedflow` to enable CLI access:
+   ```bash
+   sudo cp zedflow /usr/local/bin/zedflow
+   ```
+4. Launch `ZedFlow.app`:
+   ```bash
+   open /Applications/ZedFlow.app
+   ```
+
+### Option 2: Build & Install from Source
 
 1. Clone the repository:
    ```bash
