@@ -96,7 +96,7 @@ struct SettingsView: View {
 
                 // About Section
                 Section {
-                    LabeledContent("Version", value: "1.0.0")
+                    LabeledContent("Version", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.1.0")
                     LabeledContent("Platform", value: "Native macOS (Local-only)")
                 } header: {
                     Text("About ZedFlow")

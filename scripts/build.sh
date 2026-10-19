@@ -9,7 +9,7 @@ DIST_DIR="${ROOT_DIR}/dist"
 INSTALL=false
 UNIVERSAL=false
 PACKAGE_ZIP=false
-VERSION="1.0.0"
+VERSION="1.1.0"
 
 for arg in "$@"; do
     case "$arg" in
