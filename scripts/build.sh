@@ -36,7 +36,9 @@ for arg in "$@"; do
 done
 
 TMP_BIN_DIR="/tmp/zedflow-build-$$"
-mkdir -p "${TMP_BIN_DIR}"
+APP_BIN_DIR="${TMP_BIN_DIR}/app"
+CLI_BIN_DIR="${TMP_BIN_DIR}/cli"
+mkdir -p "${APP_BIN_DIR}" "${CLI_BIN_DIR}"
 trap "rm -rf '${TMP_BIN_DIR}'" EXIT
 
 if [ "$UNIVERSAL" = true ]; then
@@ -48,20 +50,22 @@ if [ "$UNIVERSAL" = true ]; then
     lipo -create \
         "${ROOT_DIR}/.build/arm64-apple-macosx/release/ZedFlowApp" \
         "${ROOT_DIR}/.build/x86_64-apple-macosx/release/ZedFlowApp" \
-        -output "${TMP_BIN_DIR}/ZedFlow"
+        -output "${APP_BIN_DIR}/ZedFlow"
 
     lipo -create \
         "${ROOT_DIR}/.build/arm64-apple-macosx/release/zedflow" \
         "${ROOT_DIR}/.build/x86_64-apple-macosx/release/zedflow" \
-        -output "${TMP_BIN_DIR}/zedflow"
+        -output "${CLI_BIN_DIR}/zedflow"
     
-    CLI_BIN="${TMP_BIN_DIR}/zedflow"
+    APP_BIN="${APP_BIN_DIR}/ZedFlow"
+    CLI_BIN="${CLI_BIN_DIR}/zedflow"
 else
     echo "🔨 Building ZedFlow in release mode..."
     swift build -c release --package-path "${ROOT_DIR}"
-    cp "${ROOT_DIR}/.build/release/ZedFlowApp" "${TMP_BIN_DIR}/ZedFlow"
-    cp "${ROOT_DIR}/.build/release/zedflow" "${TMP_BIN_DIR}/zedflow"
-    CLI_BIN="${ROOT_DIR}/.build/release/zedflow"
+    cp "${ROOT_DIR}/.build/release/ZedFlowApp" "${APP_BIN_DIR}/ZedFlow"
+    cp "${ROOT_DIR}/.build/release/zedflow" "${CLI_BIN_DIR}/zedflow"
+    APP_BIN="${APP_BIN_DIR}/ZedFlow"
+    CLI_BIN="${CLI_BIN_DIR}/zedflow"
 fi
 
 echo "📦 Assembling ZedFlow.app bundle..."
@@ -70,7 +74,7 @@ mkdir -p "${APP_DIR}/Contents/MacOS"
 mkdir -p "${APP_DIR}/Contents/Resources"
 
 echo -n "APPL????" > "${APP_DIR}/Contents/PkgInfo"
-cp "${TMP_BIN_DIR}/ZedFlow" "${APP_DIR}/Contents/MacOS/ZedFlow"
+cp "${APP_BIN}" "${APP_DIR}/Contents/MacOS/ZedFlow"
 cp "${ROOT_DIR}/Config/Info.plist" "${APP_DIR}/Contents/Info.plist"
 if [ -f "${ROOT_DIR}/Config/AppIcon.icns" ]; then
     cp "${ROOT_DIR}/Config/AppIcon.icns" "${APP_DIR}/Contents/Resources/AppIcon.icns"
@@ -99,11 +103,8 @@ if [ "$PACKAGE_ZIP" = true ]; then
     rm -f "${ZIP_PATH}" "${ZIP_PATH}.sha256"
     
     # Bundle ZedFlow.app and standalone CLI binary into release archive
-    if [ "${CLI_BIN}" != "${TMP_BIN_DIR}/zedflow" ]; then
-        cp "${CLI_BIN}" "${TMP_BIN_DIR}/zedflow"
-    fi
     (cd "${ROOT_DIR}" && zip -r -q -y "${ZIP_PATH}" "ZedFlow.app")
-    (cd "${TMP_BIN_DIR}" && zip -u -q "${ZIP_PATH}" "zedflow")
+    (cd "${CLI_BIN_DIR}" && zip -u -q "${ZIP_PATH}" "zedflow")
     
     (cd "${DIST_DIR}" && shasum -a 256 "${ZIP_NAME}" > "${ZIP_NAME}.sha256")
     
@@ -119,7 +120,7 @@ if [ "$INSTALL" = true ]; then
     cp -R "${APP_DIR}" /Applications/ZedFlow.app
 
     CLI_TARGET="/usr/local/bin/zedflow"
-    if [ ! -d "/usr/local/bin" ]; then
+    if [ ! -d "/usr/local/bin" ] || [ ! -w "/usr/local/bin" ]; then
         CLI_TARGET="${HOME}/.local/bin/zedflow"
         mkdir -p "${HOME}/.local/bin"
     fi
