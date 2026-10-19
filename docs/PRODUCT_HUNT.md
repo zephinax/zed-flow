@@ -21,8 +21,27 @@ Welcome to the official Product Hunt launch kit for **ZedFlow**. This document p
 
 ## 📝 2. Product Description (Product Hunt Listing)
 
-### Short Description (Punchy Summary)
-> ZedFlow bridges the gap between terminal automation and the macOS menu bar. Run, schedule, and monitor shell scripts, Python tools, and CLI workflows with zero friction. Features sub-action presets with SF Symbols, unstoppable recursive SIGKILL force stop, zero-config shell environment loader, and headless Unix domain socket IPC with `--json` output for AI agents.
+### Short Description (Strictly under 500 characters for Product Hunt form)
+```text
+Run, schedule, and monitor scripts from your macOS menu bar. ZedFlow brings terminal automation to your status bar with zero Electron bloat.
+
+Features:
+• Multi-action presets with custom flags & SF Symbols
+• Recursive SIGKILL force stop — no orphan workers
+• Built-in recurring interval & daily scheduler
+• Headless Unix Socket IPC with --json for AI agents
+• Real-time streaming ANSI console & execution history
+• Zero-config login shell environment
+
+Native Swift 6, <25MB RAM, open-source.
+```
+*(491 characters)*
+
+### Alternative Paragraph Description (<500 characters)
+```text
+ZedFlow bridges terminal automation with the macOS menu bar. Run, schedule, and monitor shell scripts, Python tools, and CLI workflows with zero friction. Features sub-action presets with SF Symbols, recursive SIGKILL force stop, zero-config shell environment loader, recurring interval & daily scheduler, and headless Unix socket IPC with --json for AI agents (Claude, Cursor). Built natively with Swift 6, uses under 25MB RAM, and is 100% free and open source.
+```
+*(462 characters)*
 
 ### Detailed Description (Full Listing Body)
 
