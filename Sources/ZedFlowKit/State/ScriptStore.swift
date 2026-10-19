@@ -47,10 +47,14 @@ public final class ScriptStore {
     public private(set) var latestExecutions: [UUID: ScriptExecution] = [:]
     public private(set) var executionHistories: [UUID: [ScriptExecution]] = [:]
     public private(set) var isRunningScript: [UUID: Bool] = [:]
+    public private(set) var heartbeatStatuses: [UUID: ExecutionStatus] = [:]
+    public private(set) var lastHeartbeatDates: [UUID: Date] = [:]
+    public private(set) var isProbingHeartbeat: [UUID: Bool] = [:]
     public private(set) var isLoading: Bool = false
     public var errorMessage: String? = nil
 
     private var activeProcesses: [UUID: RunningProcess] = [:]
+    @ObservationIgnored nonisolated(unsafe) private var heartbeatTasks: [UUID: Task<Void, Never>] = [:]
     public let storageService: StorageService
     public let processRunner: ProcessRunner
     public let scheduler: JobScheduler
@@ -133,19 +137,8 @@ public final class ScriptStore {
                 if let latest = try? await storageService.loadExecutions(for: script.id).first {
                     latestExecutions[script.id] = latest
                 }
-                // Silently probe status in background if script defines a check or status action
-                Task.detached { [weak self, script, runner = self.processRunner] in
-                    guard let probeAction = script.actions.first(where: { $0.arguments == ["check"] }) ??
-                                            script.actions.first(where: { $0.arguments == ["status"] }) else { return }
-                    if let (exec, _) = try? runner.runAndWait(script: script, action: probeAction) {
-                        await MainActor.run { [weak self] in
-                            if self?.isRunningScript[script.id] != true {
-                                self?.latestExecutions[script.id] = exec
-                            }
-                        }
-                    }
-                }
             }
+            reconcileHeartbeats()
             scheduler.reconcile(scripts: scripts)
             if ipcServer == nil {
                 startIPCServer()
@@ -158,6 +151,7 @@ public final class ScriptStore {
     public func addScript(_ script: Script) async throws {
         scripts.append(script)
         try await storageService.saveScripts(scripts)
+        reconcileHeartbeats()
         scheduler.reconcile(scripts: scripts)
     }
 
@@ -165,17 +159,26 @@ public final class ScriptStore {
         if let index = scripts.firstIndex(where: { $0.id == script.id }) {
             scripts[index] = script
             try await storageService.saveScripts(scripts)
+            heartbeatTasks[script.id]?.cancel()
+            heartbeatTasks.removeValue(forKey: script.id)
+            reconcileHeartbeats()
             scheduler.reconcile(scripts: scripts)
         }
     }
 
     public func deleteScript(_ script: Script) async throws {
         stopScript(script)
+        heartbeatTasks[script.id]?.cancel()
+        heartbeatTasks.removeValue(forKey: script.id)
+        heartbeatStatuses.removeValue(forKey: script.id)
+        lastHeartbeatDates.removeValue(forKey: script.id)
+        isProbingHeartbeat.removeValue(forKey: script.id)
         scripts.removeAll { $0.id == script.id }
         latestExecutions.removeValue(forKey: script.id)
         activeExecutions.removeValue(forKey: script.id)
         executionHistories.removeValue(forKey: script.id)
         isRunningScript.removeValue(forKey: script.id)
+        reconcileHeartbeats()
         scheduler.reconcile(scripts: scripts)
         try await storageService.saveScripts(scripts)
         try? await storageService.deleteHistory(for: script.id)
@@ -338,11 +341,92 @@ public final class ScriptStore {
         }
     }
 
+    // MARK: - Status & Heartbeat
+
     public func executionStatus(for script: Script) -> ExecutionStatus? {
         if isRunningScript[script.id] == true {
             return .running
         }
-        return latestExecutions[script.id]?.status
+        switch script.statusConfig.mode {
+        case .lastExecution:
+            return latestExecutions[script.id]?.status
+        case .heartbeat:
+            return heartbeatStatuses[script.id] ?? latestExecutions[script.id]?.status
+        case .runOnly:
+            return .clear
+        }
+    }
+
+    public func reconcileHeartbeats() {
+        // Cancel tasks for scripts that are gone or no longer in heartbeat mode
+        for (id, task) in heartbeatTasks {
+            guard let script = scripts.first(where: { $0.id == id }) else {
+                task.cancel()
+                heartbeatTasks.removeValue(forKey: id)
+                continue
+            }
+            if script.statusConfig.mode != .heartbeat {
+                task.cancel()
+                heartbeatTasks.removeValue(forKey: id)
+            }
+        }
+
+        // Start heartbeat for scripts in heartbeat mode that do not have a running task
+        for script in scripts where script.statusConfig.mode == .heartbeat {
+            if heartbeatTasks[script.id] == nil {
+                startHeartbeat(for: script)
+            }
+        }
+    }
+
+    private func startHeartbeat(for script: Script) {
+        let scriptId = script.id
+        let interval = max(5, script.statusConfig.heartbeat.intervalSeconds)
+
+        let task = Task.detached { [weak self] in
+            // Initial probe shortly after registration
+            try? await Task.sleep(nanoseconds: 600_000_000) // 0.6s
+
+            while !Task.isCancelled {
+                await self?.probeHeartbeat(for: scriptId)
+
+                let sleepNanos = UInt64(interval) * 1_000_000_000
+                do {
+                    try await Task.sleep(nanoseconds: sleepNanos)
+                } catch {
+                    break
+                }
+            }
+        }
+        heartbeatTasks[scriptId] = task
+    }
+
+    public func probeHeartbeat(for scriptId: UUID) async {
+        guard let script = scripts.first(where: { $0.id == scriptId }) else { return }
+        guard isRunningScript[scriptId] != true else { return }
+        guard isProbingHeartbeat[scriptId] != true else { return }
+
+        isProbingHeartbeat[scriptId] = true
+        defer { isProbingHeartbeat[scriptId] = false }
+
+        let probeAction: ScriptAction?
+        if let actionName = script.statusConfig.heartbeat.actionName,
+           let matched = script.actions.first(where: { $0.name == actionName }) {
+            probeAction = matched
+        } else if !script.statusConfig.heartbeat.arguments.isEmpty {
+            probeAction = ScriptAction(name: "Heartbeat Probe", arguments: script.statusConfig.heartbeat.arguments)
+        } else if let autoProbe = script.actions.first(where: { $0.arguments == ["status"] }) ??
+                                 script.actions.first(where: { $0.arguments == ["check"] }) {
+            probeAction = autoProbe
+        } else {
+            probeAction = nil
+        }
+
+        let runner = self.processRunner
+        if let (exec, _) = try? runner.runAndWait(script: script, action: probeAction) {
+            heartbeatStatuses[scriptId] = exec.status
+            lastHeartbeatDates[scriptId] = Date()
+        }
     }
 
     // MARK: - Workspace Actions

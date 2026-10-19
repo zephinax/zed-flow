@@ -433,6 +433,27 @@ public final class IPCServer: @unchecked Sendable {
                 script.notifyOnFailure = notifyFailure
             }
 
+            // Status Source Mode & Heartbeat
+            if let modeStr = request.statusMode?.lowercased().trimmingCharacters(in: .whitespaces), !modeStr.isEmpty {
+                switch modeStr {
+                case "heartbeat":
+                    script.statusConfig.mode = .heartbeat
+                case "runonly", "run-only", "running", "runningonly":
+                    script.statusConfig.mode = .runOnly
+                default:
+                    script.statusConfig.mode = .lastExecution
+                }
+            }
+            if let interval = request.heartbeatInterval {
+                script.statusConfig.heartbeat.intervalSeconds = max(5, interval)
+            }
+            if let action = request.heartbeatAction {
+                script.statusConfig.heartbeat.actionName = action.isEmpty ? nil : action
+            }
+            if let args = request.heartbeatArgs {
+                script.statusConfig.heartbeat.arguments = args
+            }
+
             script.updatedAt = Date()
 
             do {
@@ -631,6 +652,7 @@ public final class IPCServer: @unchecked Sendable {
     private func makeDTO(script: Script) -> ScriptDTO {
         let isRunning = store.isRunningScript[script.id] == true
         let latest = store.latestExecutions[script.id]
+        let currentStatus = store.executionStatus(for: script)
         return ScriptDTO(
             id: script.id,
             name: script.name,
@@ -643,9 +665,12 @@ public final class IPCServer: @unchecked Sendable {
             notifyOnFailure: script.notifyOnFailure,
             isRunning: isRunning,
             actions: script.actions.map { ScriptActionDTO(from: $0) },
-            lastStatus: isRunning ? .running : latest?.status,
+            lastStatus: currentStatus,
             lastExitCode: latest?.exitCode,
-            lastDuration: latest?.duration
+            lastDuration: latest?.duration,
+            statusSourceMode: script.statusConfig.mode.rawValue,
+            heartbeatInterval: script.statusConfig.mode == .heartbeat ? script.statusConfig.heartbeat.intervalSeconds : nil,
+            heartbeatAction: script.statusConfig.mode == .heartbeat ? script.statusConfig.heartbeat.actionName : nil
         )
     }
 }

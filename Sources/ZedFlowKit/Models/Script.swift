@@ -58,6 +58,7 @@ public struct Script: Identifiable, Codable, Hashable, Sendable {
     public var notifyOnSuccess: Bool
     public var notifyOnFailure: Bool
     public var actions: [ScriptAction]
+    public var statusConfig: StatusConfig
     public var createdAt: Date
     public var updatedAt: Date
 
@@ -72,6 +73,7 @@ public struct Script: Identifiable, Codable, Hashable, Sendable {
         notifyOnSuccess: Bool = false,
         notifyOnFailure: Bool = true,
         actions: [ScriptAction] = [],
+        statusConfig: StatusConfig = .default,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -85,12 +87,13 @@ public struct Script: Identifiable, Codable, Hashable, Sendable {
         self.notifyOnSuccess = notifyOnSuccess
         self.notifyOnFailure = notifyOnFailure
         self.actions = actions
+        self.statusConfig = statusConfig
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, scriptPath, interpreter, customInterpreterPath, schedule, isEnabled, notifyOnSuccess, notifyOnFailure, actions, createdAt, updatedAt
+        case id, name, scriptPath, interpreter, customInterpreterPath, schedule, isEnabled, notifyOnSuccess, notifyOnFailure, actions, statusConfig, createdAt, updatedAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -105,6 +108,7 @@ public struct Script: Identifiable, Codable, Hashable, Sendable {
         notifyOnSuccess = try container.decode(Bool.self, forKey: .notifyOnSuccess)
         notifyOnFailure = try container.decode(Bool.self, forKey: .notifyOnFailure)
         actions = try container.decodeIfPresent([ScriptAction].self, forKey: .actions) ?? []
+        statusConfig = try container.decodeIfPresent(StatusConfig.self, forKey: .statusConfig) ?? .default
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
     }

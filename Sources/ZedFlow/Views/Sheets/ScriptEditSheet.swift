@@ -39,6 +39,11 @@ struct ScriptEditSheet: View {
     @State private var notifyOnSuccess: Bool = false
     @State private var notifyOnFailure: Bool = true
 
+    // Status Indicator Source
+    @State private var statusMode: StatusSourceMode = .lastExecution
+    @State private var heartbeatInterval: Int = 30
+    @State private var heartbeatActionName: String = ""
+
     init(script: Script? = nil, onSave: @escaping (Script) -> Void) {
         self.existingScript = script
         self.onSave = onSave

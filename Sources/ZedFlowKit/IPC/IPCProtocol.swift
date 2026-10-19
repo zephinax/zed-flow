@@ -41,6 +41,10 @@ public struct IPCRequest: Codable, Sendable {
     public var actionIcon: String?
     public var actionArgs: [String]?
     public var targetIndex: Int?
+    public var statusMode: String?
+    public var heartbeatInterval: Int?
+    public var heartbeatAction: String?
+    public var heartbeatArgs: [String]?
 
     public init(
         command: IPCCommand,
@@ -58,7 +62,11 @@ public struct IPCRequest: Codable, Sendable {
         notifyOnFailure: Bool? = nil,
         actionIcon: String? = nil,
         actionArgs: [String]? = nil,
-        targetIndex: Int? = nil
+        targetIndex: Int? = nil,
+        statusMode: String? = nil,
+        heartbeatInterval: Int? = nil,
+        heartbeatAction: String? = nil,
+        heartbeatArgs: [String]? = nil
     ) {
         self.command = command
         self.name = name
@@ -76,6 +84,10 @@ public struct IPCRequest: Codable, Sendable {
         self.actionIcon = actionIcon
         self.actionArgs = actionArgs
         self.targetIndex = targetIndex
+        self.statusMode = statusMode
+        self.heartbeatInterval = heartbeatInterval
+        self.heartbeatAction = heartbeatAction
+        self.heartbeatArgs = heartbeatArgs
     }
 }
 
@@ -120,6 +132,9 @@ public struct ScriptDTO: Codable, Sendable {
     public var lastStatus: ExecutionStatus?
     public var lastExitCode: Int32?
     public var lastDuration: TimeInterval?
+    public var statusSourceMode: String?
+    public var heartbeatInterval: Int?
+    public var heartbeatAction: String?
 
     public init(
         id: UUID,
@@ -135,7 +150,10 @@ public struct ScriptDTO: Codable, Sendable {
         actions: [ScriptActionDTO] = [],
         lastStatus: ExecutionStatus? = nil,
         lastExitCode: Int32? = nil,
-        lastDuration: TimeInterval? = nil
+        lastDuration: TimeInterval? = nil,
+        statusSourceMode: String? = nil,
+        heartbeatInterval: Int? = nil,
+        heartbeatAction: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -151,6 +169,9 @@ public struct ScriptDTO: Codable, Sendable {
         self.lastStatus = lastStatus
         self.lastExitCode = lastExitCode
         self.lastDuration = lastDuration
+        self.statusSourceMode = statusSourceMode
+        self.heartbeatInterval = heartbeatInterval
+        self.heartbeatAction = heartbeatAction
     }
 }
 
