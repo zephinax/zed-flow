@@ -9,6 +9,7 @@
 </p>
 
 <p align="center">
+  <a href="https://zephinax.github.io/zed-flow/"><img src="https://img.shields.io/badge/website-live-06b6d4.svg?style=flat-square" alt="Website"></a>
   <a href="https://github.com/zephinax/zed-flow/actions/workflows/ci.yml"><img src="https://github.com/zephinax/zed-flow/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI Status"></a>
   <a href="https://github.com/zephinax/zed-flow/releases/latest"><img src="https://img.shields.io/github/v/release/zephinax/zed-flow?style=flat-square" alt="Latest Release"></a>
   <a href="#features"><img src="https://img.shields.io/badge/platform-macOS%2014.0%2B-blue.svg?style=flat-square" alt="Platform: macOS 14.0+"></a>

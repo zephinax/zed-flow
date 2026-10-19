@@ -1,0 +1,1672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ZedFlow — The Lightweight macOS Menu Bar Script Runner & Automation Companion</title>
+  <meta name="description" content="ZedFlow bridges the gap between terminal automation and the macOS menu bar. Run, schedule, monitor, and manage shell scripts, Python tools, and CLI utilities with instant IPC for AI agents.">
+  <meta name="keywords" content="macOS, menu bar, script runner, automation, swift, swiftui, cron, job scheduler, developer tools, apple silicon, zedflow, cli">
+  
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://zephinax.github.io/zed-flow/">
+  <meta property="og:title" content="ZedFlow — macOS Menu Bar Script Runner & Automation">
+  <meta property="og:description" content="Run, schedule, and automate shell scripts and developer workflows right from your macOS menu bar. Fast, native, and built with Swift 6.">
+  <meta property="og:image" content="assets/icon.png">
+
+  <!-- Twitter -->
+  <meta property="twitter:card" content="summary_large_image">
+  <meta property="twitter:url" content="https://zephinax.github.io/zed-flow/">
+  <meta property="twitter:title" content="ZedFlow — macOS Menu Bar Script Runner">
+  <meta property="twitter:description" content="Run, schedule, and automate shell scripts and developer workflows right from your macOS menu bar.">
+  <meta property="twitter:image" content="assets/icon.png">
+
+  <link rel="icon" type="image/png" href="assets/icon.png">
+
+  <style>
+    :root {
+      --bg: #090a0f;
+      --bg-surface: #10121a;
+      --bg-card: rgba(22, 26, 38, 0.7);
+      --bg-card-hover: rgba(30, 36, 52, 0.85);
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --border-highlight: rgba(255, 255, 255, 0.16);
+      --text-primary: #f3f4f6;
+      --text-secondary: #9ca3af;
+      --text-muted: #6b7280;
+      
+      --accent-blue: #3b82f6;
+      --accent-cyan: #06b6d4;
+      --accent-purple: #8b5cf6;
+      --accent-pink: #ec4899;
+      --accent-emerald: #10b981;
+      --accent-amber: #f59e0b;
+      --accent-red: #ef4444;
+
+      --glow-blue: rgba(59, 130, 246, 0.25);
+      --glow-purple: rgba(139, 92, 246, 0.25);
+      
+      --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", sans-serif;
+      --font-mono: "SF Mono", Menlo, Consolas, Monaco, monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      line-height: 1.6;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* Ambient background lighting */
+    .ambient-bg {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none;
+      z-index: 0;
+      overflow: hidden;
+    }
+
+    .ambient-glow {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(120px);
+      opacity: 0.45;
+    }
+
+    .glow-1 {
+      top: -150px;
+      left: 20%;
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, var(--accent-blue) 0%, transparent 70%);
+    }
+
+    .glow-2 {
+      top: 15%;
+      right: -100px;
+      width: 550px;
+      height: 550px;
+      background: radial-gradient(circle, var(--accent-purple) 0%, transparent 70%);
+    }
+
+    .glow-3 {
+      top: 60%;
+      left: -100px;
+      width: 650px;
+      height: 650px;
+      background: radial-gradient(circle, #1e1b4b 0%, transparent 70%);
+      opacity: 0.3;
+    }
+
+    /* Navigation */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      background: rgba(9, 10, 15, 0.75);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .nav-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 1rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .logo-group {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+      text-decoration: none;
+      color: var(--text-primary);
+    }
+
+    .logo-img {
+      width: 36px;
+      height: 36px;
+      border-radius: 9px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    }
+
+    .logo-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .badge-pill {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 0.15rem 0.55rem;
+      border-radius: 9999px;
+      background: rgba(59, 130, 246, 0.15);
+      color: #60a5fa;
+      border: 1px solid rgba(59, 130, 246, 0.3);
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 2rem;
+      list-style: none;
+    }
+
+    .nav-links a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 0.95rem;
+      font-weight: 500;
+      transition: color 0.2s ease;
+    }
+
+    .nav-links a:hover {
+      color: var(--text-primary);
+    }
+
+    .nav-cta {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .btn-github {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-primary);
+      text-decoration: none;
+      font-size: 0.875rem;
+      font-weight: 500;
+      border: 1px solid var(--border-subtle);
+      transition: all 0.2s ease;
+    }
+
+    .btn-github:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: var(--border-highlight);
+    }
+
+    /* Container */
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 2rem;
+      position: relative;
+      z-index: 10;
+    }
+
+    /* Hero Section */
+    .hero {
+      padding: 6rem 0 4rem;
+      text-align: center;
+      position: relative;
+    }
+
+    .hero-badge-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.4rem 1rem;
+      border-radius: 9999px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-subtle);
+      margin-bottom: 2rem;
+      backdrop-filter: blur(10px);
+    }
+
+    .hero-badge-tag {
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      color: white;
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 0.15rem 0.6rem;
+      border-radius: 9999px;
+      letter-spacing: 0.03em;
+    }
+
+    .hero-badge-text {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .hero h1 {
+      font-size: clamp(2.5rem, 6vw, 4.25rem);
+      font-weight: 800;
+      line-height: 1.1;
+      letter-spacing: -0.035em;
+      margin-bottom: 1.5rem;
+    }
+
+    .gradient-text {
+      background: linear-gradient(135deg, #ffffff 30%, #94a3b8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .gradient-accent {
+      background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 50%, #f472b6 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero-sub {
+      max-width: 720px;
+      margin: 0 auto 2.5rem;
+      font-size: clamp(1.05rem, 2vw, 1.25rem);
+      color: var(--text-secondary);
+      line-height: 1.55;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.85rem 1.8rem;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #2563eb, #7c3aed);
+      color: #ffffff;
+      text-decoration: none;
+      font-size: 1rem;
+      font-weight: 600;
+      box-shadow: 0 8px 24px var(--glow-purple), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 32px rgba(124, 58, 237, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    }
+
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.85rem 1.8rem;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-primary);
+      text-decoration: none;
+      font-size: 1rem;
+      font-weight: 600;
+      border: 1px solid var(--border-subtle);
+      backdrop-filter: blur(10px);
+      transition: all 0.2s ease;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: var(--border-highlight);
+      transform: translateY(-2px);
+    }
+
+    /* Quick Install Bar */
+    .quick-install-box {
+      max-width: 520px;
+      margin: 0 auto 4rem;
+      background: rgba(16, 18, 26, 0.8);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 0.6rem 0.85rem 0.6rem 1.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+    }
+
+    .install-code {
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      color: #93c5fd;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+
+    .copy-btn {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      border-radius: 8px;
+      padding: 0.45rem 0.75rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition: all 0.2s ease;
+    }
+
+    .copy-btn:hover {
+      background: rgba(255, 255, 255, 0.12);
+      color: var(--text-primary);
+    }
+
+    .copy-btn.copied {
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+      border-color: rgba(16, 185, 129, 0.4);
+    }
+
+    /* Hero Mockup & Desktop Simulation */
+    .mockup-wrapper {
+      position: relative;
+      max-width: 980px;
+      margin: 0 auto;
+      border-radius: 20px;
+      padding: 12px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.02) 100%);
+      box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.8), 0 0 80px rgba(59, 130, 246, 0.2);
+    }
+
+    .macos-frame {
+      background: #141721;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid var(--border-highlight);
+    }
+
+    /* macOS Simulated Menu Bar */
+    .simulated-menubar {
+      height: 32px;
+      background: rgba(30, 34, 48, 0.9);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 1rem;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: #cbd5e1;
+    }
+
+    .menubar-left {
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+    }
+
+    .apple-icon {
+      width: 14px;
+      height: 14px;
+      fill: currentColor;
+    }
+
+    .menubar-right {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .zedflow-menubar-active {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      background: rgba(59, 130, 246, 0.25);
+      border: 1px solid rgba(96, 165, 250, 0.4);
+      color: #93c5fd;
+      font-weight: 600;
+    }
+
+    .mockup-content {
+      padding: 3rem 2rem;
+      background: radial-gradient(circle at 50% 20%, #1e2436 0%, #0d0f17 100%);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+    }
+
+    .mockup-main-image {
+      max-width: 480px;
+      width: 100%;
+      height: auto;
+      border-radius: 14px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), 0 0 30px rgba(0, 0, 0, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .mockup-main-image:hover {
+      transform: scale(1.02);
+    }
+
+    /* Section Headers */
+    .section-header {
+      text-align: center;
+      max-width: 680px;
+      margin: 6rem auto 3.5rem;
+    }
+
+    .section-tag {
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #60a5fa;
+      margin-bottom: 0.75rem;
+      display: inline-block;
+    }
+
+    .section-title {
+      font-size: clamp(2rem, 4vw, 2.75rem);
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      line-height: 1.2;
+      margin-bottom: 1rem;
+    }
+
+    .section-desc {
+      color: var(--text-secondary);
+      font-size: 1.05rem;
+    }
+
+    /* Bento Grid */
+    .bento-grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 1.5rem;
+      margin-bottom: 4rem;
+    }
+
+    .bento-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 18px;
+      padding: 2rem;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .bento-card::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
+    }
+
+    .bento-card:hover {
+      transform: translateY(-4px);
+      border-color: var(--border-highlight);
+      background: var(--bg-card-hover);
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.5);
+    }
+
+    .col-4 { grid-column: span 4; }
+    .col-6 { grid-column: span 6; }
+    .col-8 { grid-column: span 8; }
+    .col-12 { grid-column: span 12; }
+
+    @media (max-width: 900px) {
+      .col-4, .col-6, .col-8 { grid-column: span 12; }
+    }
+
+    .card-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 1.25rem;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .icon-blue { color: #60a5fa; background: rgba(59, 130, 246, 0.15); border-color: rgba(59, 130, 246, 0.3); }
+    .icon-purple { color: #c084fc; background: rgba(168, 85, 247, 0.15); border-color: rgba(168, 85, 247, 0.3); }
+    .icon-emerald { color: #34d399; background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.3); }
+    .icon-amber { color: #fbbf24; background: rgba(245, 158, 11, 0.15); border-color: rgba(245, 158, 11, 0.3); }
+    .icon-red { color: #f87171; background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.3); }
+    .icon-cyan { color: #22d3ee; background: rgba(6, 182, 212, 0.15); border-color: rgba(6, 182, 212, 0.3); }
+
+    .card-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.015em;
+      margin-bottom: 0.6rem;
+      color: var(--text-primary);
+    }
+
+    .card-desc {
+      font-size: 0.95rem;
+      color: var(--text-secondary);
+      line-height: 1.55;
+    }
+
+    /* Interactive Showcase Tabs */
+    .showcase-section {
+      margin: 4rem 0 6rem;
+    }
+
+    .showcase-tabs {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 2.5rem;
+    }
+
+    .tab-btn {
+      padding: 0.65rem 1.25rem;
+      border-radius: 9999px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .tab-btn:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-primary);
+    }
+
+    .tab-btn.active {
+      background: rgba(59, 130, 246, 0.2);
+      border-color: rgba(96, 165, 250, 0.5);
+      color: #93c5fd;
+      box-shadow: 0 4px 15px rgba(59, 130, 246, 0.2);
+    }
+
+    .showcase-display {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 20px;
+      padding: 2.5rem;
+      display: flex;
+      align-items: center;
+      gap: 3rem;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+    }
+
+    @media (max-width: 900px) {
+      .showcase-display {
+        flex-direction: column;
+        padding: 1.5rem;
+      }
+    }
+
+    .showcase-text {
+      flex: 1;
+    }
+
+    .showcase-text h3 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+      letter-spacing: -0.02em;
+    }
+
+    .showcase-text p {
+      color: var(--text-secondary);
+      font-size: 1rem;
+      margin-bottom: 1.5rem;
+      line-height: 1.6;
+    }
+
+    .showcase-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .showcase-list li {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      color: #cbd5e1;
+      font-size: 0.925rem;
+    }
+
+    .showcase-list li svg {
+      color: #34d399;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .showcase-preview {
+      flex: 1.2;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+    }
+
+    .showcase-img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 12px;
+      box-shadow: 0 15px 40px rgba(0, 0, 0, 0.6);
+      border: 1px solid var(--border-highlight);
+      transition: opacity 0.3s ease;
+    }
+
+    /* Terminal Interactive Section */
+    .terminal-section {
+      margin: 6rem 0;
+    }
+
+    .terminal-window {
+      background: #0d1117;
+      border: 1px solid var(--border-highlight);
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7);
+    }
+
+    .terminal-topbar {
+      background: #161b22;
+      padding: 0.75rem 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .traffic-lights {
+      display: flex;
+      gap: 0.45rem;
+    }
+
+    .light {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+
+    .light-red { background: #ff5f56; }
+    .light-yellow { background: #ffbd2e; }
+    .light-green { background: #27c93f; }
+
+    .terminal-tabs {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .term-tab {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      padding: 0.25rem 0.65rem;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .term-tab.active {
+      background: rgba(255, 255, 255, 0.08);
+      color: #93c5fd;
+    }
+
+    .terminal-body {
+      padding: 1.5rem;
+      font-family: var(--font-mono);
+      font-size: 0.875rem;
+      line-height: 1.6;
+      color: #e6edf3;
+      overflow-x: auto;
+      min-height: 220px;
+    }
+
+    .term-prompt {
+      color: #58a6ff;
+    }
+
+    .term-cmd {
+      color: #7ee787;
+      font-weight: 600;
+    }
+
+    .term-comment {
+      color: #8b949e;
+      font-style: italic;
+    }
+
+    .term-json-key { color: #79c0ff; }
+    .term-json-str { color: #a5d6ff; }
+    .term-json-bool { color: #ff7b72; }
+
+    /* Universal Status Protocol Interactive Demo */
+    .protocol-card {
+      background: linear-gradient(135deg, rgba(22, 27, 44, 0.8) 0%, rgba(13, 16, 26, 0.9) 100%);
+      border: 1px solid var(--border-subtle);
+      border-radius: 18px;
+      padding: 2.5rem;
+      margin-bottom: 4rem;
+    }
+
+    .protocol-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem;
+      margin-top: 1.5rem;
+    }
+
+    .protocol-box {
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 1.25rem;
+    }
+
+    .protocol-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 0.2rem 0.6rem;
+      border-radius: 6px;
+      margin-bottom: 0.75rem;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .badge-active { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+    .badge-active .status-dot { background: #10b981; box-shadow: 0 0 8px #10b981; }
+
+    .badge-clear { background: rgba(156, 163, 175, 0.15); color: #9ca3af; }
+    .badge-clear .status-dot { background: #9ca3af; }
+
+    .badge-failed { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+    .badge-failed .status-dot { background: #ef4444; box-shadow: 0 0 8px #ef4444; }
+
+    /* Architecture Specs */
+    .specs-strip {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1.5rem;
+      margin: 4rem 0;
+    }
+
+    .spec-item {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border-subtle);
+      border-radius: 14px;
+      padding: 1.5rem;
+      text-align: center;
+    }
+
+    .spec-value {
+      font-size: 1.75rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.25rem;
+      background: linear-gradient(135deg, #ffffff 40%, #94a3b8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .spec-label {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    /* FAQ */
+    .faq-container {
+      max-width: 800px;
+      margin: 0 auto 6rem;
+    }
+
+    .faq-item {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      margin-bottom: 1rem;
+      overflow: hidden;
+      transition: border-color 0.2s ease;
+    }
+
+    .faq-item:hover {
+      border-color: var(--border-highlight);
+    }
+
+    .faq-question {
+      padding: 1.25rem 1.5rem;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 600;
+      color: var(--text-primary);
+      user-select: none;
+    }
+
+    .faq-chevron {
+      transition: transform 0.2s ease;
+    }
+
+    .faq-answer {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease, padding 0.3s ease;
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+      line-height: 1.6;
+      padding: 0 1.5rem;
+    }
+
+    .faq-item.open .faq-answer {
+      max-height: 300px;
+      padding: 0 1.5rem 1.25rem;
+    }
+
+    .faq-item.open .faq-chevron {
+      transform: rotate(180deg);
+    }
+
+    /* Final CTA */
+    .cta-banner {
+      background: radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.25) 0%, rgba(139, 92, 246, 0.1) 50%, rgba(16, 18, 26, 0.9) 100%);
+      border: 1px solid rgba(96, 165, 250, 0.3);
+      border-radius: 24px;
+      padding: 5rem 2rem;
+      text-align: center;
+      margin-bottom: 6rem;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    }
+
+    .cta-banner h2 {
+      font-size: clamp(2rem, 5vw, 3rem);
+      font-weight: 800;
+      margin-bottom: 1rem;
+      letter-spacing: -0.025em;
+    }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--border-subtle);
+      padding: 3rem 0;
+      background: rgba(9, 10, 15, 0.9);
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+
+    .footer-content {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1.5rem;
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 1.5rem;
+      list-style: none;
+    }
+
+    .footer-links a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      transition: color 0.2s ease;
+    }
+
+    .footer-links a:hover {
+      color: var(--text-primary);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Ambient lighting backdrop -->
+  <div class="ambient-bg">
+    <div class="ambient-glow glow-1"></div>
+    <div class="ambient-glow glow-2"></div>
+    <div class="ambient-glow glow-3"></div>
+  </div>
+
+  <!-- Navbar -->
+  <nav>
+    <div class="nav-container">
+      <a href="#" class="logo-group">
+        <img src="assets/icon.png" alt="ZedFlow Logo" class="logo-img">
+        <span class="logo-title">
+          ZedFlow
+          <span class="badge-pill">v1.0.0</span>
+        </span>
+      </a>
+
+      <ul class="nav-links">
+        <li><a href="#features">Features</a></li>
+        <li><a href="#showcase">UI Tour</a></li>
+        <li><a href="#cli">CLI & IPC</a></li>
+        <li><a href="#protocol">Protocol</a></li>
+        <li><a href="#install">Install</a></li>
+        <li><a href="#faq">FAQ</a></li>
+      </ul>
+
+      <div class="nav-cta">
+        <a href="https://github.com/zephinax/zed-flow" target="_blank" rel="noopener" class="btn-github">
+          <svg height="18" width="18" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/>
+          </svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <header class="hero">
+    <div class="container">
+      <div class="hero-badge-wrap">
+        <span class="hero-badge-tag">Universal Binary</span>
+        <span class="hero-badge-text">Built natively with Swift 6 for Apple Silicon & Intel</span>
+      </div>
+
+      <h1>
+        <span class="gradient-text">The lightweight macOS menu bar</span><br>
+        <span class="gradient-accent">script runner & scheduler.</span>
+      </h1>
+
+      <p class="hero-sub">
+        Bridge terminal automation with the macOS menu bar. Run, schedule, and monitor shell scripts, Python tools, and developer workflows with zero friction and headless IPC for AI agents.
+      </p>
+
+      <div class="hero-actions">
+        <a href="https://github.com/zephinax/zed-flow/releases/latest" class="btn-primary">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 3.5c.62-.75 1.04-1.8 1.01-2.85-.9.04-1.98.6-2.62 1.35-.57.65-1.06 1.72-1.02 2.76.99.08 2.01-.51 2.63-1.26z"/>
+          </svg>
+          Download for macOS
+        </a>
+
+        <a href="#cli" class="btn-secondary">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="4 17 10 11 4 5"></polyline>
+            <line x1="12" y1="19" x2="20" y2="19"></line>
+          </svg>
+          Explore CLI & IPC
+        </a>
+      </div>
+
+      <!-- Quick install bar -->
+      <div class="quick-install-box">
+        <div class="install-code">
+          <span style="color:#64748b;">$</span> git clone https://github.com/zephinax/zed-flow.git &amp;&amp; ./zed-flow/scripts/build.sh -i
+        </div>
+        <button class="copy-btn" onclick="copyInstallCmd(this, 'git clone https://github.com/zephinax/zed-flow.git && ./zed-flow/scripts/build.sh --install')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+          <span>Copy</span>
+        </button>
+      </div>
+
+      <!-- Desktop Mockup -->
+      <div class="mockup-wrapper">
+        <div class="macos-frame">
+          <div class="simulated-menubar">
+            <div class="menubar-left">
+              <svg class="apple-icon" viewBox="0 0 170 170">
+                <path d="M150.37 130.25c-2.45 5.66-5.35 10.87-8.71 15.66-4.58 6.53-8.33 11.05-11.22 13.56-4.48 4.12-9.28 6.23-14.42 6.35-3.69 0-8.14-1.05-13.32-3.18-5.19-2.12-9.97-3.17-14.34-3.17-4.58 0-9.49 1.05-14.75 3.17-5.26 2.13-9.5 3.24-12.74 3.35-4.35.13-9.16-1.9-14.42-6.08-3.69-3.04-7.67-7.81-11.96-14.31-7.05-10.74-12.5-22.75-16.35-36.02-3.85-13.26-5.78-25.56-5.78-36.9 0-14.93 3.65-27.42 10.96-37.47 7.31-10.05 16.59-15.19 27.84-15.42 4.13 0 9.07 1.13 14.82 3.38 5.75 2.26 9.53 3.44 11.34 3.55 1.57-.11 5.51-1.35 11.83-3.71 6.31-2.37 11.36-3.44 15.15-3.22 11.23.65 20.31 4.54 27.24 11.66 4.35 4.47 7.72 9.77 10.12 15.89-9.14 5.54-13.62 13.04-13.43 22.49.2 8.36 3.48 15.44 9.85 21.23 6.36 5.79 13.92 9.08 22.68 9.87-2.17 6.3-4.57 12.51-7.18 18.63zM119.22 33.15c0-6.73 2.45-13.1 7.36-19.12 4.9-6.02 11.13-10.22 18.68-12.61.11 1.2.16 2.18.16 2.94 0 6.64-2.58 13.11-7.75 19.41-5.17 6.3-11.32 10.35-18.45 12.15z"/>
+              </svg>
+              <span>Finder</span>
+              <span>File</span>
+              <span>Edit</span>
+              <span>View</span>
+              <span>Go</span>
+              <span>Window</span>
+              <span>Help</span>
+            </div>
+            <div class="menubar-right">
+              <span class="zedflow-menubar-active">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <polyline points="4 17 10 11 4 5"></polyline>
+                  <line x1="12" y1="19" x2="20" y2="19"></line>
+                </svg>
+                ZedFlow
+              </span>
+              <span>100% ⚡</span>
+              <span>Mon 18:30</span>
+            </div>
+          </div>
+          <div class="mockup-content">
+            <img src="screenshots/menu-bar-actions.png" alt="ZedFlow Menu Bar Popover Screenshot" class="mockup-main-image">
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Key Value Props / Bento Grid -->
+  <section id="features" class="container">
+    <div class="section-header">
+      <span class="section-tag">Engineered for Developers</span>
+      <h2 class="section-title">Everything you need for effortless macOS automation</h2>
+      <p class="section-desc">Designed as a true native citizen of macOS Sonoma and Sequoia — ultra-fast, zero electron bloat, and rock solid.</p>
+    </div>
+
+    <div class="bento-grid">
+      <!-- Card 1 -->
+      <div class="bento-card col-4">
+        <div class="card-icon icon-blue">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+            <line x1="8" y1="21" x2="16" y2="21"></line>
+            <line x1="12" y1="17" x2="12" y2="21"></line>
+          </svg>
+        </div>
+        <h3 class="card-title">Menu Bar First</h3>
+        <p class="card-desc">Lives discreetly in your menu bar. No dock clutter, no heavy windows. Instant access to your proxy toggles, docker cleaners, and scrapers.</p>
+      </div>
+
+      <!-- Card 2 -->
+      <div class="bento-card col-4">
+        <div class="card-icon icon-purple">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="16 18 22 12 16 6"></polyline>
+            <polyline points="8 6 2 12 8 18"></polyline>
+          </svg>
+        </div>
+        <h3 class="card-title">Actions &amp; Presets</h3>
+        <p class="card-desc">Attach multiple action verbs to any script (e.g. <code>start</code>, <code>stop</code>, <code>status</code>, <code>prod</code>) each with custom flags and SF Symbol icons.</p>
+      </div>
+
+      <!-- Card 3 -->
+      <div class="bento-card col-4">
+        <div class="card-icon icon-red">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <rect x="9" y="9" width="6" height="6"></rect>
+          </svg>
+        </div>
+        <h3 class="card-title">Reliable Force Stop</h3>
+        <p class="card-desc">Recursively walks the process tree via <code>proc_listchildpids</code> to terminate runaway processes and all descendant child workers without dangling leaks.</p>
+      </div>
+
+      <!-- Card 4 -->
+      <div class="bento-card col-6">
+        <div class="card-icon icon-emerald">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+          </svg>
+        </div>
+        <h3 class="card-title">Native Job Scheduler</h3>
+        <p class="card-desc">Automate recurring tasks on flexible intervals (1m to 24h) or exact daily times (e.g., <code>09:30</code>). Built-in sleep/wake drift compensation prevents backlog stampedes.</p>
+      </div>
+
+      <!-- Card 5 -->
+      <div class="bento-card col-6">
+        <div class="card-icon icon-cyan">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="4 17 10 11 4 5"></polyline>
+            <line x1="12" y1="19" x2="20" y2="19"></line>
+          </svg>
+        </div>
+        <h3 class="card-title">Headless IPC CLI (<code>zedflow</code>)</h3>
+        <p class="card-desc">Full Unix Domain Socket control. Seamlessly integrates with Claude Code, Cursor, Raycast, Alfred, and shell scripts with structured <code>--json</code> output.</p>
+      </div>
+
+      <!-- Card 6 -->
+      <div class="bento-card col-4">
+        <div class="card-icon icon-amber">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+          </svg>
+        </div>
+        <h3 class="card-title">Zero-Config Shell</h3>
+        <p class="card-desc">Resolves your actual interactive login shell environment: automatically loads Homebrew, nvm, pyenv, asdf, cargo, and custom PATH variables.</p>
+      </div>
+
+      <!-- Card 7 -->
+      <div class="bento-card col-4">
+        <div class="card-icon icon-emerald">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+          </svg>
+        </div>
+        <h3 class="card-title">Universal Status Protocol</h3>
+        <p class="card-desc">Scripts signal real-time status dynamically using stdout directives (<code>[zedflow:status=active]</code>) or standard LSB exit codes (0/2/3).</p>
+      </div>
+
+      <!-- Card 8 -->
+      <div class="bento-card col-4">
+        <div class="card-icon icon-purple">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="8" y1="6" x2="21" y2="6"></line>
+            <line x1="8" y1="12" x2="21" y2="12"></line>
+            <line x1="8" y1="18" x2="21" y2="18"></line>
+            <line x1="3" y1="6" x2="3.01" y2="6"></line>
+            <line x1="3" y1="12" x2="3.01" y2="12"></line>
+            <line x1="3" y1="18" x2="3.01" y2="18"></line>
+          </svg>
+        </div>
+        <h3 class="card-title">Streaming ANSI Console</h3>
+        <p class="card-desc">Full ANSI color decoding with a 60fps throttled UI buffer. Keeps persistent execution logs of up to 50 past executions per script.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Interactive UI Showcase -->
+  <section id="showcase" class="container showcase-section">
+    <div class="section-header">
+      <span class="section-tag">Visual Tour</span>
+      <h2 class="section-title">Clean, intuitive, and distraction-free</h2>
+      <p class="section-desc">Explore the interfaces designed to make script management feel like second nature.</p>
+    </div>
+
+    <!-- Tabs -->
+    <div class="showcase-tabs">
+      <button class="tab-btn active" onclick="switchTab(0)">
+        <span>🚀 Menu Bar Actions</span>
+      </button>
+      <button class="tab-btn" onclick="switchTab(1)">
+        <span>⚙️ Script Config</span>
+      </button>
+      <button class="tab-btn" onclick="switchTab(2)">
+        <span>📺 Real-Time Console</span>
+      </button>
+      <button class="tab-btn" onclick="switchTab(3)">
+        <span>📜 Execution History</span>
+      </button>
+    </div>
+
+    <!-- Tab Content -->
+    <div class="showcase-display">
+      <div class="showcase-text">
+        <h3 id="showcase-title">Menu Bar Quick Actions</h3>
+        <p id="showcase-desc">
+          Single-line compact script cards with dynamic status dots. When a script defines multiple action presets, an elegant minimal capsule dropdown lets you trigger specific subcommands with one click.
+        </p>
+        <ul class="showcase-list" id="showcase-points">
+          <li>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            Dynamic indicators: Active (Green), Clear (Gray), Failed (Red), Running (Blue)
+          </li>
+          <li>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            SF Symbol icons attached directly to individual action buttons
+          </li>
+          <li>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            Interactive heartbeat probe support for continuous background health monitoring
+          </li>
+        </ul>
+      </div>
+
+      <div class="showcase-preview">
+        <img id="showcase-img" src="screenshots/menu-bar-actions.png" alt="Showcase Preview" class="showcase-img">
+      </div>
+    </div>
+  </section>
+
+  <!-- CLI & AI Agent IPC Terminal -->
+  <section id="cli" class="container terminal-section">
+    <div class="section-header">
+      <span class="section-tag">Developer &amp; AI First</span>
+      <h2 class="section-title">Headless IPC Control for AI Agents &amp; CLI</h2>
+      <p class="section-desc">Everything configurable in the UI is 100% controllable via the <code>zedflow</code> CLI over Unix Domain Socket with structured <code>--json</code> output.</p>
+    </div>
+
+    <div class="terminal-window">
+      <div class="terminal-topbar">
+        <div class="traffic-lights">
+          <span class="light light-red"></span>
+          <span class="light light-yellow"></span>
+          <span class="light light-green"></span>
+        </div>
+        <div class="terminal-tabs">
+          <button class="term-tab active" onclick="switchTermTab(0)">zedflow list</button>
+          <button class="term-tab" onclick="switchTermTab(1)">zedflow run</button>
+          <button class="term-tab" onclick="switchTermTab(2)">zedflow status --json (AI Agent)</button>
+        </div>
+        <span style="font-size:0.75rem; color:#6b7280; font-family:var(--font-mono);">zsh</span>
+      </div>
+
+      <div class="terminal-body" id="term-content">
+        <div class="term-prompt">$ <span class="term-cmd">zedflow list</span></div>
+        <div style="color:#94a3b8; margin: 0.5rem 0;">
+NAME                STATUS   SCHEDULE  PATH                                                               <br>
+------------------  -------  --------  -------------------------------------------------------------------<br>
+shecan_dns          active   Manual    /Users/developer/scripts/shecan_dns.sh                             <br>
+&nbsp;&nbsp;↳ Actions: On [on], Off [off], Status [status]<br>
+docker_prune        success  Daily     /Users/developer/scripts/docker_clean.sh                            <br>
+&nbsp;&nbsp;↳ Actions: Dry-Run, Full-Prune<br>
+db_backup           clear    Interval  /Users/developer/scripts/backup_pg.sh                              <br>
+        </div>
+        <div class="term-comment"># Discover all registered scripts, actions, schedules, and active statuses</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Universal Status Protocol -->
+  <section id="protocol" class="container">
+    <div class="protocol-card">
+      <span class="section-tag">Universal Status Protocol</span>
+      <h2 style="font-size: 2rem; font-weight: 700; margin-bottom: 0.75rem;">Teach your scripts to communicate state</h2>
+      <p style="color: var(--text-secondary); max-width: 700px;">
+        ZedFlow introduces a dead-simple status protocol. Any script can report its ongoing state using stdout directives or standard LSB exit codes without any SDK dependencies.
+      </p>
+
+      <div class="protocol-grid">
+        <div class="protocol-box">
+          <span class="protocol-badge badge-active">
+            <span class="status-dot"></span> Active / Success
+          </span>
+          <p style="color:var(--text-secondary); font-size: 0.875rem; margin-bottom: 0.75rem;">
+            Exit code <code>0</code>, or print anywhere in stdout:
+          </p>
+          <code style="font-family:var(--font-mono); font-size:0.8rem; color:#34d399; background:rgba(0,0,0,0.5); padding:0.4rem 0.6rem; border-radius:6px; display:block;">
+            echo "[zedflow:status=active]"
+          </code>
+        </div>
+
+        <div class="protocol-box">
+          <span class="protocol-badge badge-clear">
+            <span class="status-dot"></span> Clear / Inactive
+          </span>
+          <p style="color:var(--text-secondary); font-size: 0.875rem; margin-bottom: 0.75rem;">
+            Exit code <code>2</code> or <code>3</code> (LSB off), or directive:
+          </p>
+          <code style="font-family:var(--font-mono); font-size:0.8rem; color:#9ca3af; background:rgba(0,0,0,0.5); padding:0.4rem 0.6rem; border-radius:6px; display:block;">
+            echo "[zedflow:status=clear]"
+          </code>
+        </div>
+
+        <div class="protocol-box">
+          <span class="protocol-badge badge-failed">
+            <span class="status-dot"></span> Failed / Error
+          </span>
+          <p style="color:var(--text-secondary); font-size: 0.875rem; margin-bottom: 0.75rem;">
+            Any non-zero exit code (except 2/3), or directive:
+          </p>
+          <code style="font-family:var(--font-mono); font-size:0.8rem; color:#f87171; background:rgba(0,0,0,0.5); padding:0.4rem 0.6rem; border-radius:6px; display:block;">
+            echo "[zedflow:status=failed]"
+          </code>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Technical Specs -->
+  <section class="container">
+    <div class="specs-strip">
+      <div class="spec-item">
+        <div class="spec-value">Swift 6</div>
+        <div class="spec-label">Strict Concurrency Native</div>
+      </div>
+      <div class="spec-item">
+        <div class="spec-value">&lt; 25 MB</div>
+        <div class="spec-label">Lightweight Memory Footprint</div>
+      </div>
+      <div class="spec-item">
+        <div class="spec-value">Universal</div>
+        <div class="spec-label">Apple Silicon + Intel (x86_64)</div>
+      </div>
+      <div class="spec-item">
+        <div class="spec-value">100% Native</div>
+        <div class="spec-label">Zero Electron / Web Bloat</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Installation -->
+  <section id="install" class="container" style="margin: 6rem auto;">
+    <div class="section-header">
+      <span class="section-tag">Get Started</span>
+      <h2 class="section-title">Install ZedFlow on your Mac</h2>
+      <p class="section-desc">Choose between pre-built universal binaries or building from source.</p>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem;">
+      <!-- Option 1 -->
+      <div class="bento-card">
+        <div class="badge-pill" style="align-self: flex-start; margin-bottom: 1rem;">Recommended</div>
+        <h3 class="card-title">Pre-built Universal Binary</h3>
+        <p class="card-desc" style="margin-bottom: 1.5rem;">
+          Download the signed application bundle and standalone CLI archive from GitHub Releases.
+        </p>
+        <ol style="color: var(--text-secondary); font-size: 0.9rem; margin-left: 1.25rem; margin-bottom: 1.5rem; display: flex; flex-direction: column; gap: 0.5rem;">
+          <li>Download <code>ZedFlow-v1.0.0-macOS-universal.zip</code></li>
+          <li>Extract and move <code>ZedFlow.app</code> to <code>/Applications</code></li>
+          <li>(Optional) Copy <code>zedflow</code> to <code>~/.local/bin/zedflow</code></li>
+        </ol>
+        <a href="https://github.com/zephinax/zed-flow/releases/latest" class="btn-primary" style="justify-content: center; margin-top: auto;">
+          Download Latest Release
+        </a>
+      </div>
+
+      <!-- Option 2 -->
+      <div class="bento-card">
+        <div class="badge-pill" style="align-self: flex-start; margin-bottom: 1rem; background:rgba(168,85,247,0.15); color:#c084fc; border-color:rgba(168,85,247,0.3);">From Source</div>
+        <h3 class="card-title">Build &amp; Install with Script</h3>
+        <p class="card-desc" style="margin-bottom: 1.5rem;">
+          Clone the repository and run the build script to compile with Swift 6 and install the app + CLI automatically:
+        </p>
+        <div style="background: rgba(0,0,0,0.5); padding: 1rem; border-radius: 8px; font-family: var(--font-mono); font-size: 0.8rem; color: #93c5fd; margin-bottom: 1.5rem; border: 1px solid var(--border-subtle); line-height: 1.6;">
+          git clone https://github.com/zephinax/zed-flow.git<br>
+          cd zed-flow<br>
+          ./scripts/build.sh --install
+        </div>
+        <a href="https://github.com/zephinax/zed-flow" class="btn-secondary" style="justify-content: center; margin-top: auto;">
+          View Repository
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ Section -->
+  <section id="faq" class="container">
+    <div class="section-header">
+      <span class="section-tag">Frequently Asked Questions</span>
+      <h2 class="section-title">Got questions? We've got answers.</h2>
+    </div>
+
+    <div class="faq-container">
+      <div class="faq-item">
+        <div class="faq-question" onclick="toggleFaq(this)">
+          <span>Where does ZedFlow appear after launching?</span>
+          <svg class="faq-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </div>
+        <div class="faq-answer">
+          ZedFlow runs as a native macOS accessory menu bar item (with a terminal <code>&gt;_</code> icon) in the top-right menu bar. It does not occupy a slot in the macOS Dock or App Switcher, keeping your workspace distraction-free.
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-question" onclick="toggleFaq(this)">
+          <span>How does ZedFlow load environment variables and paths like Homebrew or nvm?</span>
+          <svg class="faq-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </div>
+        <div class="faq-answer">
+          ZedFlow executes an interactive login shell probe in the background upon launch to extract your exact user environment (<code>$PATH</code>, <code>pyenv</code>, <code>nvm</code>, <code>cargo</code>, <code>rbenv</code>, Homebrew). Your scripts execute with the exact same binary paths and environment variables as your terminal.
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-question" onclick="toggleFaq(this)">
+          <span>Can AI coding agents (Claude Code, Cursor, Codex) configure scripts in ZedFlow?</span>
+          <svg class="faq-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </div>
+        <div class="faq-answer">
+          Yes! The <code>zedflow</code> CLI provides full discovery and manipulation with a dedicated <code>--json</code> flag across all commands (e.g. <code>zedflow list --json</code>, <code>zedflow add ...</code>, <code>zedflow run ...</code>). AI agents can programmatically register, inspect, trigger, and verify automation without touching the UI.
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-question" onclick="toggleFaq(this)">
+          <span>What happens if a script spawns child background processes and I click Stop?</span>
+          <svg class="faq-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </div>
+        <div class="faq-answer">
+          ZedFlow implements a robust process-tree termination engine using macOS <code>proc_listchildpids</code>. It recursively discovers all descendant child PIDs, issues <code>SIGKILL</code> to the process group and all sub-processes, and frees all file descriptor handles to ensure zero runaway background processes.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Final CTA Banner -->
+  <section class="container">
+    <div class="cta-banner">
+      <h2>Automate without friction.</h2>
+      <p style="color: var(--text-secondary); max-width: 600px; margin: 0 auto 2rem; font-size: 1.15rem;">
+        Take control of your recurring workflows, scripts, and dev tools directly from your Mac menu bar.
+      </p>
+      <div style="display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap;">
+        <a href="https://github.com/zephinax/zed-flow/releases/latest" class="btn-primary">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 3.5c.62-.75 1.04-1.8 1.01-2.85-.9.04-1.98.6-2.62 1.35-.57.65-1.06 1.72-1.02 2.76.99.08 2.01-.51 2.63-1.26z"/>
+          </svg>
+          Download ZedFlow v1.0.0
+        </a>
+        <a href="https://github.com/zephinax/zed-flow" class="btn-secondary">
+          Star on GitHub ⭐
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container footer-content">
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <img src="assets/icon.png" alt="ZedFlow Logo" style="width: 24px; height: 24px; border-radius: 6px;">
+        <span>ZedFlow — Released under the <strong>MIT License</strong>.</span>
+      </div>
+
+      <ul class="footer-links">
+        <li><a href="https://github.com/zephinax/zed-flow">GitHub</a></li>
+        <li><a href="https://github.com/zephinax/zed-flow/releases">Releases</a></li>
+        <li><a href="https://github.com/zephinax/zed-flow/blob/main/CHANGELOG.md">Changelog</a></li>
+        <li><a href="https://github.com/zephinax/zed-flow/blob/main/LICENSE">License</a></li>
+      </ul>
+    </div>
+  </footer>
+
+  <script>
+    // Copy Install Command
+    function copyInstallCmd(button, text) {
+      navigator.clipboard.writeText(text).then(() => {
+        button.classList.add('copied');
+        const span = button.querySelector('span');
+        const originalText = span.textContent;
+        span.textContent = 'Copied!';
+        setTimeout(() => {
+          button.classList.remove('copied');
+          span.textContent = originalText;
+        }, 2000);
+      });
+    }
+
+    // Showcase Tabs Data
+    const tabsData = [
+      {
+        title: "Menu Bar Quick Actions",
+        desc: "Single-line compact script cards with dynamic status dots. When a script defines multiple action presets, an elegant minimal capsule dropdown lets you trigger specific subcommands with one click.",
+        img: "screenshots/menu-bar-actions.png",
+        points: [
+          "Dynamic indicators: Active (Green), Clear (Gray), Failed (Red), Running (Blue)",
+          "SF Symbol icons attached directly to individual action buttons",
+          "Interactive heartbeat probe support for continuous background health monitoring"
+        ]
+      },
+      {
+        title: "Script Configuration Modal",
+        desc: "Easily register custom scripts, customize shell interpreters (Bash, Zsh, Python, Node, Ruby, Custom binary), configure interval or daily schedules, and attach notification preferences.",
+        img: "screenshots/new-script-config.png",
+        points: [
+          "Choose any interpreter or custom binary wrapper",
+          "Add unlimited action presets with custom flags and SF Symbol icons",
+          "Configure interval-based execution (every 5m, 1h, etc.) or exact daily time schedules"
+        ]
+      },
+      {
+        title: "Real-Time Streaming Console",
+        desc: "Monitor execution live with 60fps throttled UI rendering, full ANSI color sequence decoding, execution duration timer, and immediate SIGKILL process group termination.",
+        img: "screenshots/live-console-directives.png",
+        points: [
+          "Live ANSI color decoder for terminal escape codes",
+          "Sub-millisecond execution duration tracking and real-time exit code reporting",
+          "Immediate stop button that cleans up all child worker processes"
+        ]
+      },
+      {
+        title: "Execution History & Logs",
+        desc: "Review past runs with complete output logs, timestamps, status indicators, and execution duration. Stores up to 50 runs per script with instant search and inspection.",
+        img: "screenshots/execution-history.png",
+        points: [
+          "Persistent execution log history stored locally via SQLite / JSON storage",
+          "View full standard output and standard error history for past runs",
+          "Inspect exit codes and exact execution duration history"
+        ]
+      }
+    ];
+
+    function switchTab(index) {
+      document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+        btn.classList.toggle('active', i === index);
+      });
+
+      const data = tabsData[index];
+      const titleEl = document.getElementById('showcase-title');
+      const descEl = document.getElementById('showcase-desc');
+      const imgEl = document.getElementById('showcase-img');
+      const listEl = document.getElementById('showcase-points');
+
+      imgEl.style.opacity = '0';
+      setTimeout(() => {
+        titleEl.textContent = data.title;
+        descEl.textContent = data.desc;
+        imgEl.src = data.img;
+        imgEl.style.opacity = '1';
+
+        listEl.innerHTML = data.points.map(pt => `
+          <li>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            ${pt}
+          </li>
+        `).join('');
+      }, 150);
+    }
+
+    // Terminal Tabs
+    const termTabs = [
+      {
+        cmd: "zedflow list",
+        html: `<div class="term-prompt">$ <span class="term-cmd">zedflow list</span></div>
+<div style="color:#94a3b8; margin: 0.5rem 0;">
+NAME                STATUS   SCHEDULE  PATH                                                               <br>
+------------------  -------  --------  -------------------------------------------------------------------<br>
+shecan_dns          active   Manual    /Users/developer/scripts/shecan_dns.sh                             <br>
+&nbsp;&nbsp;↳ Actions: On [on], Off [off], Status [status]<br>
+docker_prune        success  Daily     /Users/developer/scripts/docker_clean.sh                            <br>
+&nbsp;&nbsp;↳ Actions: Dry-Run, Full-Prune<br>
+db_backup           clear    Interval  /Users/developer/scripts/backup_pg.sh                              <br>
+</div>
+<div class="term-comment"># Discover all registered scripts, actions, schedules, and active statuses</div>`
+      },
+      {
+        cmd: "zedflow run",
+        html: `<div class="term-prompt">$ <span class="term-cmd">zedflow run shecan_dns --action on</span></div>
+<div style="color:#94a3b8; margin: 0.5rem 0;">
+[18:32:01] Executing action: On [args: "on"]<br>
+[18:32:01] Resolving environment from /bin/zsh...<br>
+[18:32:02] Updating DNS servers to Shecan primary: 178.22.122.100, 185.51.200.2<br>
+[18:32:02] DNS cache flushed successfully.<br>
+<span style="color:#34d399;">[zedflow:status=active] Shecan DNS enabled</span><br>
+<span style="color:#34d399;">✓ Finished with exit code 0 (elapsed: 1.12s)</span>
+</div>`
+      },
+      {
+        cmd: "zedflow status --json",
+        html: `<div class="term-prompt">$ <span class="term-cmd">zedflow status shecan_dns --json</span></div>
+<div style="color:#94a3b8; margin: 0.5rem 0;">
+{<br>
+&nbsp;&nbsp;<span class="term-json-key">"name"</span>: <span class="term-json-str">"shecan_dns"</span>,<br>
+&nbsp;&nbsp;<span class="term-json-key">"status"</span>: <span class="term-json-str">"active"</span>,<br>
+&nbsp;&nbsp;<span class="term-json-key">"path"</span>: <span class="term-json-str">"/Users/developer/scripts/shecan_dns.sh"</span>,<br>
+&nbsp;&nbsp;<span class="term-json-key">"schedule"</span>: { <span class="term-json-key">"type"</span>: <span class="term-json-str">"manual"</span> },<br>
+&nbsp;&nbsp;<span class="term-json-key">"actions"</span>: [<br>
+&nbsp;&nbsp;&nbsp;&nbsp;{ <span class="term-json-key">"name"</span>: <span class="term-json-str">"On"</span>, <span class="term-json-key">"arguments"</span>: [<span class="term-json-str">"on"</span>] },<br>
+&nbsp;&nbsp;&nbsp;&nbsp;{ <span class="term-json-key">"name"</span>: <span class="term-json-str">"Off"</span>, <span class="term-json-key">"arguments"</span>: [<span class="term-json-str">"off"</span>] }<br>
+&nbsp;&nbsp;],<br>
+&nbsp;&nbsp;<span class="term-json-key">"latestExecution"</span>: {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="term-json-key">"exitCode"</span>: 0,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="term-json-key">"duration"</span>: 1.12<br>
+&nbsp;&nbsp;}<br>
+}
+</div>
+<div class="term-comment"># Native JSON output ready for AI coding agents &amp; automations</div>`
+      }
+    ];
+
+    function switchTermTab(index) {
+      document.querySelectorAll('.term-tab').forEach((tab, i) => {
+        tab.classList.toggle('active', i === index);
+      });
+      document.getElementById('term-content').innerHTML = termTabs[index].html;
+    }
+
+    // FAQ Accordion
+    function toggleFaq(button) {
+      const item = button.parentElement;
+      item.classList.toggle('open');
+    }
+  </script>
+</body>
+</html>
